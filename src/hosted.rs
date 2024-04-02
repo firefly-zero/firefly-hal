@@ -4,17 +4,17 @@ use gilrs::*;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-pub struct DeviceImpl<'a> {
+pub struct DeviceImpl {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
-    root:       &'a Path,
+    root:       &'static Path,
 }
 
-impl<'a> Device<'a> for DeviceImpl<'a> {
+impl Device for DeviceImpl {
     type Read = File;
 
-    fn new(root: &'a str) -> Self {
+    fn new(root: &'static str) -> Self {
         let start = std::time::Instant::now();
         let mut gilrs = Gilrs::new().unwrap();
         let gamepad_id = gilrs.next_event().map(|Event { id, .. }| id);

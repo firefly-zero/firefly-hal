@@ -3,10 +3,10 @@ use fugit::{Instant, MillisDurationU32};
 pub type Time = Instant<u32, 1, 1000>;
 pub type Delay = MillisDurationU32;
 
-pub trait Device<'a> {
+pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
 
-    fn new(root: &'a str) -> Self;
+    fn new(root: &'static str) -> Self;
 
     /// The current time.
     ///
