@@ -1,24 +1,14 @@
 use crate::shared::*;
 use gilrs::ev::state::AxisData;
 use gilrs::*;
-use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-
-static mut DEVICE: OnceCell<DeviceImpl> = OnceCell::new();
 
 pub struct DeviceImpl<'a> {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
     root:       &'a Path,
-}
-
-pub fn get_device() -> &'static mut DeviceImpl<'static> {
-    unsafe {
-        DEVICE.get_or_init(|| DeviceImpl::new("../"));
-        DEVICE.get_mut().unwrap()
-    }
 }
 
 impl<'a> Device<'a> for DeviceImpl<'a> {
