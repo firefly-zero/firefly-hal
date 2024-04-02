@@ -4,9 +4,12 @@ pub type Time = Instant<u32, 1, 1000>;
 pub type Delay = MillisDurationU32;
 
 pub trait Device {
+    type Read: wasmi::Read + embedded_io::Read;
+
     fn now(&self) -> Time;
     fn delay(&self, d: Delay);
     fn read_input(&mut self) -> Option<InputState>;
+    fn open_file(&self, path: &[&str]) -> Option<Self::Read>;
 }
 
 pub struct StickPos {

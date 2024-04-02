@@ -4,5 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+embedded-io = { version = "0.6.1", default-features = false }
 fugit = "0.3.7"
 gilrs = "0.10.6"
+wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }

@@ -2,17 +2,19 @@ use crate::shared::*;
 use gilrs::ev::state::AxisData;
 use gilrs::*;
 use std::cell::OnceCell;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 static mut DEVICE: OnceCell<HostedDevice> = OnceCell::new();
 
-pub struct HostedDevice {
+pub struct HostedDevice<'a> {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
+    root:       &'a Path,
 }
 
-pub fn get_device() -> &'static mut HostedDevice {
+pub fn get_device() -> &'static mut HostedDevice<'static> {
     unsafe {
         DEVICE.get_or_init(|| {
             let start = std::time::Instant::now();
@@ -22,13 +24,16 @@ pub fn get_device() -> &'static mut HostedDevice {
                 start,
                 gilrs,
                 gamepad_id,
+                root: Path::new("../"),
             }
         });
         DEVICE.get_mut().unwrap()
     }
 }
 
-impl Device for HostedDevice {
+impl<'a> Device for HostedDevice<'a> {
+    type Read = File;
+
     fn now(&self) -> Time {
         let now = std::time::Instant::now();
         let dur = now.duration_since(self.start);
@@ -54,6 +59,14 @@ impl Device for HostedDevice {
         let menu = gamepad.is_pressed(Button::Start);
         Some(InputState { left, right, menu })
     }
+
+    fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
+        debug_assert!(path.len() >= 4);
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        let file = std::fs::File::open(path).ok()?;
+        Some(File { file })
+    }
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<StickPos> {
@@ -70,4 +83,28 @@ fn data_to_i16(v: Option<&AxisData>) -> Option<i16> {
     let v = v.value();
     let r = (v * 1000.) as i16;
     Some(r)
+}
+
+pub struct File {
+    file: std::fs::File,
+}
+
+impl wasmi::Read for File {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::ReadError> {
+        let res = std::io::Read::read(&mut self.file, buf);
+        res.map_err(|error| match error.kind() {
+            std::io::ErrorKind::UnexpectedEof => wasmi::ReadError::EndOfStream,
+            _ => wasmi::ReadError::UnknownError,
+        })
+    }
+}
+
+impl embedded_io::ErrorType for File {
+    type Error = std::io::Error;
+}
+
+impl embedded_io::Read for File {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        std::io::Read::read(&mut self.file, buf)
+    }
 }
