@@ -6,4 +6,5 @@ mod shared;
 #[cfg_attr(target_os = "none", path = "embedded.rs")]
 mod device;
 
-pub use device::*;
+pub use device::get_device;
+pub use shared::Device;
