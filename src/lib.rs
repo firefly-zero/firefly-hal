@@ -7,4 +7,4 @@ mod shared;
 mod device;
 
 pub use device::DeviceImpl;
-pub use shared::Device;
+pub use shared::{Delay, Device, Time};
