@@ -5,34 +5,36 @@ use std::cell::OnceCell;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-static mut DEVICE: OnceCell<HostedDevice> = OnceCell::new();
+static mut DEVICE: OnceCell<DeviceImpl> = OnceCell::new();
 
-pub struct HostedDevice<'a> {
+pub struct DeviceImpl<'a> {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
     root:       &'a Path,
 }
 
-pub fn get_device() -> &'static mut HostedDevice<'static> {
+pub fn get_device() -> &'static mut DeviceImpl<'static> {
     unsafe {
-        DEVICE.get_or_init(|| {
-            let start = std::time::Instant::now();
-            let mut gilrs = Gilrs::new().unwrap();
-            let gamepad_id = gilrs.next_event().map(|Event { id, .. }| id);
-            HostedDevice {
-                start,
-                gilrs,
-                gamepad_id,
-                root: Path::new("../"),
-            }
-        });
+        DEVICE.get_or_init(|| DeviceImpl::new("../"));
         DEVICE.get_mut().unwrap()
     }
 }
 
-impl<'a> Device for HostedDevice<'a> {
+impl<'a> Device<'a> for DeviceImpl<'a> {
     type Read = File;
+
+    fn new(root: &'a str) -> Self {
+        let start = std::time::Instant::now();
+        let mut gilrs = Gilrs::new().unwrap();
+        let gamepad_id = gilrs.next_event().map(|Event { id, .. }| id);
+        Self {
+            start,
+            gilrs,
+            gamepad_id,
+            root: Path::new(root),
+        }
+    }
 
     fn now(&self) -> Time {
         let now = std::time::Instant::now();

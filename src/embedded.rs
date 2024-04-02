@@ -1,14 +1,14 @@
-pub struct EmbeddedDevice {
+pub struct DeviceImpl {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
 }
 
-pub fn get_device() -> &'static mut EmbeddedDevice {
+pub fn get_device() -> &'static mut DeviceImpl {
     todo!()
 }
 
-impl Device for EmbeddedDevice {
+impl Device for DeviceImpl {
     fn now(&self) -> Time {
         todo!()
     }

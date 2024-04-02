@@ -3,9 +3,10 @@ use fugit::{Instant, MillisDurationU32};
 pub type Time = Instant<u32, 1, 1000>;
 pub type Delay = MillisDurationU32;
 
-pub trait Device {
+pub trait Device<'a> {
     type Read: wasmi::Read + embedded_io::Read;
 
+    fn new(root: &'a str) -> Self;
     fn now(&self) -> Time;
     fn delay(&self, d: Delay);
     fn read_input(&mut self) -> Option<InputState>;
