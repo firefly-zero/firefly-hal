@@ -63,6 +63,22 @@ impl Device for DeviceImpl {
         let file = std::fs::File::open(path).ok()?;
         Some(File { file })
     }
+
+    fn make_dir(&self, path: &[&str]) -> bool {
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        std::fs::create_dir_all(path).is_ok()
+    }
+
+    fn remove_file(&self, path: &[&str]) -> bool {
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        let res = std::fs::remove_file(path);
+        match res {
+            Ok(_) => true,
+            Err(err) => matches!(err.kind(), std::io::ErrorKind::NotFound),
+        }
+    }
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<StickPos> {

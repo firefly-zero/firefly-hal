@@ -43,7 +43,24 @@ pub trait Device {
     /// 5. and the last is file name.
     ///
     /// The runtime ensures that the path is relative and never goes up the tree.
+    ///
+    /// The whole filesystem abstraction (this method and theo nes below)
+    /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
+    ///
+    /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
     fn open_file(&self, path: &[&str]) -> Option<Self::Read>;
+
+    /// Create the directory and all its parents if doesn't exist.
+    ///
+    /// Returns false only if there is an error.
+    fn make_dir(&self, path: &[&str]) -> bool;
+
+    /// Delete the given file if exists.
+    ///
+    /// Directories cannot be removed.
+    ///
+    /// Returns false only if there is an error.
+    fn remove_file(&self, path: &[&str]) -> bool;
 }
 
 pub struct StickPos {
@@ -57,3 +74,9 @@ pub struct InputState {
     pub right: Option<StickPos>,
     pub menu:  bool,
 }
+
+// (func (param $originalPtr i32)
+//   (param $originalSize i32)
+//   (param $alignment i32)
+//   (param $newSize i32)
+//   (result i32))
