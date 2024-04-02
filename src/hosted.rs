@@ -38,6 +38,10 @@ impl Device for DeviceImpl {
     }
 
     fn read_input(&mut self) -> Option<InputState> {
+        if self.gamepad_id.is_none() {
+            self.gamepad_id = self.gilrs.next_event().map(|Event { id, .. }| id);
+        }
+        while self.gilrs.next_event().is_some() {}
         let gamepad_id = self.gamepad_id?;
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
         let left = make_point(
