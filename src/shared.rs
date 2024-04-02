@@ -31,6 +31,22 @@ pub trait Device {
     /// Read gamepad input.
     fn read_input(&mut self) -> Option<InputState>;
 
+    /// Log a debug message into console.
+    ///
+    /// On hosted environments, it just prints into stdout.
+    /// On embedded systems, use [defmt].
+    ///
+    /// [defmt]: https://defmt.ferrous-systems.com/introduction
+    fn log_debug(&self, src: &str, msg: &str);
+
+    /// Log an error into console.
+    ///
+    /// On hosted environments, it just prints into stderr.
+    /// On embedded systems, use [defmt].
+    ///
+    /// [defmt]: https://defmt.ferrous-systems.com/introduction
+    fn log_error(&self, src: &str, msg: &str);
+
     /// Open a file for reading.
     ///
     /// The file path is given as a slice of path components.
