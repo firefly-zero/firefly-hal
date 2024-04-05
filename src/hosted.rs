@@ -57,11 +57,11 @@ impl Device for DeviceImpl {
     }
 
     fn log_debug(&self, src: &str, msg: &str) {
-        println!("\033[34mDEBUG\033[0m({src}): {msg}");
+        println!("DEBUG({src}): {msg}");
     }
 
     fn log_error(&self, src: &str, msg: &str) {
-        eprintln!("\033[31mERROR\033[0m({src}): {msg}");
+        eprintln!("ERROR({src}): {msg}");
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
