@@ -44,16 +44,18 @@ impl Device for DeviceImpl {
         while self.gilrs.next_event().is_some() {}
         let gamepad_id = self.gamepad_id?;
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
-        let left = make_point(
+        let pad = make_point(
             gamepad.axis_data(Axis::LeftStickX),
             gamepad.axis_data(Axis::LeftStickY),
         );
-        let right = make_point(
-            gamepad.axis_data(Axis::RightStickX),
-            gamepad.axis_data(Axis::RightStickY),
-        );
-        let menu = gamepad.is_pressed(Button::Start);
-        Some(InputState { left, right, menu })
+        let buttons = [
+            gamepad.is_pressed(Button::South), // A
+            gamepad.is_pressed(Button::East),  // B
+            gamepad.is_pressed(Button::West),  // X
+            gamepad.is_pressed(Button::North), // Y
+            gamepad.is_pressed(Button::Start),
+        ];
+        Some(InputState { pad, buttons })
     }
 
     fn log_debug(&self, src: &str, msg: &str) {
@@ -97,11 +99,11 @@ impl Device for DeviceImpl {
     }
 }
 
-fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<StickPos> {
+fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<Pad> {
     let x = data_to_i16(x);
     let y = data_to_i16(y);
     match (x, y) {
-        (Some(x), Some(y)) => Some(StickPos { x, y }),
+        (Some(x), Some(y)) => Some(Pad { x, y }),
         _ => None,
     }
 }

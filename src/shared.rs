@@ -84,16 +84,15 @@ pub trait Device {
     fn remove_file(&self, path: &[&str]) -> bool;
 }
 
-pub struct StickPos {
+pub struct Pad {
     pub x: i16,
     pub y: i16,
 }
 
 #[derive(Default)]
 pub struct InputState {
-    pub left:  Option<StickPos>,
-    pub right: Option<StickPos>,
-    pub menu:  bool,
+    pub pad:     Option<Pad>,
+    pub buttons: [bool; 5],
 }
 
 // (func (param $originalPtr i32)
