@@ -1,20 +1,20 @@
 use crate::shared::*;
 use gilrs::ev::state::AxisData;
 use gilrs::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 pub struct DeviceImpl {
     start:      std::time::Instant,
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
-    root:       &'static Path,
+    root:       PathBuf,
 }
 
 impl Device for DeviceImpl {
     type Read = File;
 
-    fn new(root: &'static str) -> Self {
+    fn new(root: &str) -> Self {
         let start = std::time::Instant::now();
         let mut gilrs = Gilrs::new().unwrap();
         let gamepad_id = gilrs.next_event().map(|Event { id, .. }| id);
@@ -22,7 +22,7 @@ impl Device for DeviceImpl {
             start,
             gilrs,
             gamepad_id,
-            root: Path::new(root),
+            root: PathBuf::new().join(root),
         }
     }
 
@@ -65,11 +65,19 @@ impl Device for DeviceImpl {
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
-        debug_assert!(path.len() >= 4);
         let path: PathBuf = path.iter().collect();
         let path = self.root.join(path);
         let file = std::fs::File::open(path).ok()?;
         Some(File { file })
+    }
+
+    fn get_file_size(&self, path: &[&str]) -> Option<u32> {
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        let Ok(meta) = std::fs::metadata(path) else {
+            return None;
+        };
+        Some(meta.len() as u32)
     }
 
     fn make_dir(&self, path: &[&str]) -> bool {

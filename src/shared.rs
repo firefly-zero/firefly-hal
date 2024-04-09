@@ -66,6 +66,11 @@ pub trait Device {
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
     fn open_file(&self, path: &[&str]) -> Option<Self::Read>;
 
+    /// Get file size in bytes.
+    ///
+    /// None should be returned if file not found.
+    fn get_file_size(&self, path: &[&str]) -> Option<u32>;
+
     /// Create the directory and all its parents if doesn't exist.
     ///
     /// Returns false only if there is an error.
