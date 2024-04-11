@@ -6,8 +6,6 @@ pub type Delay = MillisDurationU32;
 pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
 
-    fn new(root: &'static str) -> Self;
-
     /// The current time.
     ///
     /// Should be precise enough for adjusting the delay between frames.

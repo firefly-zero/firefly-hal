@@ -11,10 +11,8 @@ pub struct DeviceImpl {
     root:       PathBuf,
 }
 
-impl Device for DeviceImpl {
-    type Read = File;
-
-    fn new(root: &str) -> Self {
+impl DeviceImpl {
+    pub fn new(root: PathBuf) -> Self {
         let start = std::time::Instant::now();
         let mut gilrs = Gilrs::new().unwrap();
         let gamepad_id = gilrs.next_event().map(|Event { id, .. }| id);
@@ -22,9 +20,13 @@ impl Device for DeviceImpl {
             start,
             gilrs,
             gamepad_id,
-            root: PathBuf::new().join(root),
+            root,
         }
     }
+}
+
+impl Device for DeviceImpl {
+    type Read = File;
 
     fn now(&self) -> Time {
         let now = std::time::Instant::now();
