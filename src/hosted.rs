@@ -27,6 +27,7 @@ impl DeviceImpl {
 
 impl Device for DeviceImpl {
     type Read = File;
+    type Write = File;
 
     fn now(&self) -> Time {
         let now = std::time::Instant::now();
@@ -72,6 +73,13 @@ impl Device for DeviceImpl {
         let path: PathBuf = path.iter().collect();
         let path = self.root.join(path);
         let file = std::fs::File::open(path).ok()?;
+        Some(File { file })
+    }
+
+    fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        let file = std::fs::File::create(path).ok()?;
         Some(File { file })
     }
 
@@ -138,5 +146,15 @@ impl embedded_io::ErrorType for File {
 impl embedded_io::Read for File {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         std::io::Read::read(&mut self.file, buf)
+    }
+}
+
+impl embedded_io::Write for File {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        std::io::Write::write(&mut self.file, buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        std::io::Write::flush(&mut self.file)
     }
 }

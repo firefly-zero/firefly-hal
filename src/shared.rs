@@ -5,6 +5,7 @@ pub type Delay = MillisDurationU32;
 
 pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
+    type Write: embedded_io::Write;
 
     /// The current time.
     ///
@@ -63,6 +64,11 @@ pub trait Device {
     ///
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
     fn open_file(&self, path: &[&str]) -> Option<Self::Read>;
+
+    /// Create a new file and open it for write.
+    ///
+    /// If the file already exists, it will be overwritten.
+    fn create_file(&self, path: &[&str]) -> Option<Self::Write>;
 
     /// Get file size in bytes.
     ///
