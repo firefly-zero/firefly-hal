@@ -47,10 +47,16 @@ impl Device for DeviceImpl {
         while self.gilrs.next_event().is_some() {}
         let gamepad_id = self.gamepad_id?;
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
-        let pad = make_point(
-            gamepad.axis_data(Axis::LeftStickX),
-            gamepad.axis_data(Axis::LeftStickY),
-        );
+        let pad_pressed =
+            gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
+        let pad = if pad_pressed {
+            make_point(
+                gamepad.axis_data(Axis::LeftStickX),
+                gamepad.axis_data(Axis::LeftStickY),
+            )
+        } else {
+            None
+        };
         let buttons = [
             gamepad.is_pressed(Button::South), // A
             gamepad.is_pressed(Button::East),  // B
