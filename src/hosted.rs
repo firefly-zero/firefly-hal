@@ -41,9 +41,11 @@ impl Device for DeviceImpl {
     }
 
     fn read_input(&mut self) -> Option<InputState> {
+        // Detect gamepad
         if self.gamepad_id.is_none() {
             self.gamepad_id = self.gilrs.next_event().map(|Event { id, .. }| id);
         }
+        // Consume all pending events to update the state
         while self.gilrs.next_event().is_some() {}
         let gamepad_id = self.gamepad_id?;
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
