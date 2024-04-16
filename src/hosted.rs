@@ -115,6 +115,30 @@ impl Device for DeviceImpl {
             Err(err) => matches!(err.kind(), std::io::ErrorKind::NotFound),
         }
     }
+
+    fn iter_dir<F>(&self, path: &[&str], mut f: F) -> bool
+    where
+        F: FnMut(EntryKind, &[u8]),
+    {
+        let path: PathBuf = path.iter().collect();
+        let path = self.root.join(path);
+        let entries = std::fs::read_dir(path).unwrap();
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let kind = if path.is_dir() {
+                EntryKind::Dir
+            } else if path.is_file() {
+                EntryKind::File
+            } else {
+                continue;
+            };
+            let fname = entry.file_name();
+            let fname = fname.as_encoded_bytes();
+            f(kind, fname);
+        }
+        true
+    }
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<Pad> {

@@ -86,6 +86,21 @@ pub trait Device {
     ///
     /// Returns false only if there is an error.
     fn remove_file(&self, path: &[&str]) -> bool;
+
+    /// Call the callback for each entry in the given directory.
+    ///
+    /// A better API would be to return an iterator
+    /// but embedded-sdmmc-rs [doesn't support it][1].
+    ///
+    /// [1]: https://github.com/rust-embedded-community/embedded-sdmmc-rs/issues/125
+    fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
+    where
+        F: FnMut(EntryKind, &[u8]);
+}
+
+pub enum EntryKind {
+    Dir,
+    File,
 }
 
 pub struct Pad {
