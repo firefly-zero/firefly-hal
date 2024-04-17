@@ -122,9 +122,13 @@ impl Device for DeviceImpl {
     {
         let path: PathBuf = path.iter().collect();
         let path = self.root.join(path);
-        let entries = std::fs::read_dir(path).unwrap();
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return false;
+        };
         for entry in entries {
-            let entry = entry.unwrap();
+            let Ok(entry) = entry else {
+                return false;
+            };
             let path = entry.path();
             let kind = if path.is_dir() {
                 EntryKind::Dir
