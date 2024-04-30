@@ -9,6 +9,7 @@ pub struct DeviceImpl {
     gilrs:      Gilrs,
     gamepad_id: Option<GamepadId>,
     root:       PathBuf,
+    input:      InputState,
 }
 
 impl DeviceImpl {
@@ -21,7 +22,13 @@ impl DeviceImpl {
             gilrs,
             gamepad_id,
             root,
+            input: InputState::default(),
         }
+    }
+
+    /// Called by the GUI to set input from UI and keyboard.
+    pub fn update_input(&mut self, input: InputState) {
+        self.input = input;
     }
 }
 
@@ -47,7 +54,9 @@ impl Device for DeviceImpl {
         }
         // Consume all pending events to update the state
         while self.gilrs.next_event().is_some() {}
-        let gamepad_id = self.gamepad_id?;
+        let Some(gamepad_id) = self.gamepad_id else {
+            return Some(self.input.clone());
+        };
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
         let pad_pressed =
             gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
@@ -66,6 +75,20 @@ impl Device for DeviceImpl {
             gamepad.is_pressed(Button::North), // Y
             gamepad.is_pressed(Button::Start),
         ];
+
+        // merge together input from gamepad and from keyboard
+        let buttons = [
+            self.input.buttons[0] || buttons[0],
+            self.input.buttons[1] || buttons[1],
+            self.input.buttons[2] || buttons[2],
+            self.input.buttons[3] || buttons[3],
+            self.input.buttons[4] || buttons[4],
+        ];
+        let pad = match pad {
+            Some(pad) => Some(pad),
+            None => self.input.pad.clone(),
+        };
+
         Some(InputState { pad, buttons })
     }
 

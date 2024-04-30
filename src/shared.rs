@@ -103,12 +103,13 @@ pub enum EntryKind {
     File,
 }
 
+#[derive(Default, Clone, Debug)]
 pub struct Pad {
     pub x: i16,
     pub y: i16,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Debug)]
 pub struct InputState {
     pub pad:     Option<Pad>,
     pub buttons: [bool; 5],
