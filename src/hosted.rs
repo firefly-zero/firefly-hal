@@ -189,11 +189,11 @@ pub struct File {
 }
 
 impl wasmi::Read for File {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::ReadError> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
         let res = std::io::Read::read(&mut self.file, buf);
         res.map_err(|error| match error.kind() {
-            std::io::ErrorKind::UnexpectedEof => wasmi::ReadError::EndOfStream,
-            _ => wasmi::ReadError::UnknownError,
+            std::io::ErrorKind::UnexpectedEof => wasmi::errors::ReadError::EndOfStream,
+            _ => wasmi::errors::ReadError::UnknownError,
         })
     }
 }
