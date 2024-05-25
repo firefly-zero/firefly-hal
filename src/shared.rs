@@ -1,3 +1,4 @@
+use core::fmt::Display;
 use fugit::{Instant, MillisDurationU32};
 
 pub type Time = Instant<u32, 1, 1000>;
@@ -36,7 +37,7 @@ pub trait Device {
     /// On embedded systems, use [defmt].
     ///
     /// [defmt]: https://defmt.ferrous-systems.com/introduction
-    fn log_debug(&self, src: &str, msg: &str);
+    fn log_debug<D: Display>(&self, src: &str, msg: D);
 
     /// Log an error into console.
     ///
@@ -44,7 +45,7 @@ pub trait Device {
     /// On embedded systems, use [defmt].
     ///
     /// [defmt]: https://defmt.ferrous-systems.com/introduction
-    fn log_error(&self, src: &str, msg: &str);
+    fn log_error<D: Display>(&self, src: &str, msg: D);
 
     /// Open a file for reading.
     ///

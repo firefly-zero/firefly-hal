@@ -1,4 +1,5 @@
 use crate::shared::*;
+use core::fmt::Display;
 use gilrs::ev::state::AxisData;
 use gilrs::*;
 use std::path::PathBuf;
@@ -92,11 +93,11 @@ impl Device for DeviceImpl {
         Some(InputState { pad, buttons })
     }
 
-    fn log_debug(&self, src: &str, msg: &str) {
+    fn log_debug<D: Display>(&self, src: &str, msg: D) {
         println!("DEBUG({src}): {msg}");
     }
 
-    fn log_error(&self, src: &str, msg: &str) {
+    fn log_error<D: Display>(&self, src: &str, msg: D) {
         eprintln!("ERROR({src}): {msg}");
     }
 
