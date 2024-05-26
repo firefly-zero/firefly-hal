@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 fugit = "0.3.7"
 gilrs = "0.10.6"
+rust-embed = "*"
+vfs = { version = "*", features = ["embedded-fs"] }
 wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
