@@ -16,7 +16,7 @@ gilrs = "0.10.6"
 [target.'cfg(target_family = "wasm")'.dependencies]
 embedded-io = { version = "0.6.1", features = ["std"] }
 gilrs = "0.10.6"
-rust-embed = "*"
+rust-embed = { version = "*", features = ["debug-embed"] }
 vfs = { version = "*", features = ["embedded-fs"] }
 wasm-bindgen = "*"
 web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
