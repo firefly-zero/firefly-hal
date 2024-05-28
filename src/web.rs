@@ -1,6 +1,6 @@
+use crate::gamepad::GamepadManager;
 use crate::shared::*;
 use core::fmt::Display;
-use gilrs::*;
 use rust_embed::RustEmbed;
 use vfs::FileSystem;
 
@@ -10,11 +10,9 @@ struct Vfs;
 
 pub struct DeviceImpl {
     // start:      std::time::Instant,
-    // gilrs:      Gilrs,
-    // gamepad_id: Option<GamepadId>,
-    // input:      InputState,
-    vfs:    vfs::impls::embedded::EmbeddedFS<Vfs>,
-    window: web_sys::Window,
+    gamepad: GamepadManager,
+    vfs:     vfs::impls::embedded::EmbeddedFS<Vfs>,
+    window:  web_sys::Window,
 }
 
 impl Device for DeviceImpl {
@@ -30,7 +28,8 @@ impl Device for DeviceImpl {
     }
 
     fn read_input(&mut self) -> Option<InputState> {
-        None
+        // TODO: read keyboard input as well
+        self.gamepad.read_input()
     }
 
     fn log_debug<D: Display>(&self, src: &str, msg: D) {
