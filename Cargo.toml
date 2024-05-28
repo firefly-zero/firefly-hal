@@ -5,15 +5,22 @@ edition = "2021"
 
 [dependencies]
 fugit = "0.3.7"
+wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }
+
+# hosted
+[target.'cfg(not(target_os = "none"))'.dependencies]
+embedded-io = { version = "0.6.1", features = ["std"] }
+gilrs = "0.10.6"
+
+# web
+[target.'cfg(target_family = "wasm")'.dependencies]
+embedded-io = { version = "0.6.1", features = ["std"] }
 gilrs = "0.10.6"
 rust-embed = "*"
 vfs = { version = "*", features = ["embedded-fs"] }
 wasm-bindgen = "0.2.92"
-wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }
 web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
 
-[target.'cfg(not(target_os = "none"))'.dependencies]
-embedded-io = { version = "0.6.1", features = ["std"] }
-
+# embedded
 [target.'cfg(target_os = "none")'.dependencies]
 embedded-io = { version = "0.6.1", default-features = false }

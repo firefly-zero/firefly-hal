@@ -22,7 +22,6 @@ pub struct DeviceImpl {
     // start:      std::time::Instant,
     gamepad: GamepadManager,
     vfs:     vfs::impls::embedded::EmbeddedFS<Vfs>,
-    window:  web_sys::Window,
     perf:    web_sys::Performance,
 }
 
@@ -32,9 +31,8 @@ impl DeviceImpl {
         let window = web_sys::window().unwrap();
         Self {
             gamepad: GamepadManager::new(),
-            vfs: vfs::EmbeddedFS::new(),
-            perf: window.performance().unwrap(),
-            window,
+            vfs:     vfs::EmbeddedFS::new(),
+            perf:    window.performance().unwrap(),
         }
     }
 }
@@ -47,7 +45,7 @@ impl Device for DeviceImpl {
         Time::from_ticks(self.perf.now() as u32)
     }
 
-    fn delay(&self, d: Delay) {
+    fn delay(&self, _d: Delay) {
         // TODO: find a way to block the thread.
     }
 
