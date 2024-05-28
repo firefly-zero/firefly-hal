@@ -23,6 +23,20 @@ pub struct DeviceImpl {
     gamepad: GamepadManager,
     vfs:     vfs::impls::embedded::EmbeddedFS<Vfs>,
     window:  web_sys::Window,
+    perf:    web_sys::Performance,
+}
+
+impl DeviceImpl {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        let window = web_sys::window().unwrap();
+        Self {
+            gamepad: GamepadManager::new(),
+            vfs: vfs::EmbeddedFS::new(),
+            perf: window.performance().unwrap(),
+            window,
+        }
+    }
 }
 
 impl Device for DeviceImpl {
@@ -30,11 +44,11 @@ impl Device for DeviceImpl {
     type Write = FileW;
 
     fn now(&self) -> Time {
-        todo!()
+        Time::from_ticks(self.perf.now() as u32)
     }
 
     fn delay(&self, d: Delay) {
-        todo!()
+        // TODO: find a way to block the thread.
     }
 
     fn read_input(&mut self) -> Option<InputState> {
@@ -82,7 +96,8 @@ impl Device for DeviceImpl {
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        todo!()
+        // TODO: implement
+        false
     }
 }
 
