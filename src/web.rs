@@ -64,30 +64,30 @@ impl Device for DeviceImpl {
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
         let path = path.join("/");
-        let file = self.vfs.open_file(&path).ok()?;
+        let file = self.vfs.open_file(&format!("/{path}")).ok()?;
         Some(FileR { file })
     }
 
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
         let path = path.join("/");
-        let file = self.vfs.create_file(&path).ok()?;
+        let file = self.vfs.create_file(&format!("/{path}")).ok()?;
         Some(FileW { file })
     }
 
     fn get_file_size(&self, path: &[&str]) -> Option<u32> {
         let path = path.join("/");
-        let meta = self.vfs.metadata(&path).ok()?;
+        let meta = self.vfs.metadata(&format!("/{path}")).ok()?;
         Some(meta.len as u32)
     }
 
     fn make_dir(&self, path: &[&str]) -> bool {
         let path = path.join("/");
-        self.vfs.create_dir(&path).is_ok()
+        self.vfs.create_dir(&format!("/{path}")).is_ok()
     }
 
     fn remove_file(&self, path: &[&str]) -> bool {
         let path = path.join("/");
-        self.vfs.remove_file(&path).is_ok()
+        self.vfs.remove_file(&format!("/{path}")).is_ok()
     }
 
     fn iter_dir<F>(&self, path: &[&str], mut f: F) -> bool
@@ -95,7 +95,7 @@ impl Device for DeviceImpl {
         F: FnMut(EntryKind, &[u8]),
     {
         let path = path.join("/");
-        let Ok(entries) = self.vfs.read_dir(&path) else {
+        let Ok(entries) = self.vfs.read_dir(&format!("/{path}")) else {
             return false;
         };
         for path in entries {
