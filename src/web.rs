@@ -3,10 +3,20 @@ use crate::shared::*;
 use core::fmt::Display;
 use rust_embed::RustEmbed;
 use vfs::FileSystem;
+use wasm_bindgen::prelude::*;
 
 #[derive(RustEmbed, Debug)]
 #[folder = "/home/gram/.local/share/firefly"]
 struct Vfs;
+
+#[wasm_bindgen]
+extern {
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn console_log(msg: &str);
+
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn console_error(msg: &str);
+}
 
 pub struct DeviceImpl {
     // start:      std::time::Instant,
@@ -33,11 +43,11 @@ impl Device for DeviceImpl {
     }
 
     fn log_debug<D: Display>(&self, src: &str, msg: D) {
-        todo!()
+        console_log(&format!("{src}: {msg}"))
     }
 
     fn log_error<D: Display>(&self, src: &str, msg: D) {
-        todo!()
+        console_error(&format!("{src}: {msg}"))
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
