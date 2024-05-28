@@ -92,12 +92,24 @@ impl Device for DeviceImpl {
         self.vfs.remove_file(&path).is_ok()
     }
 
-    fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
+    fn iter_dir<F>(&self, path: &[&str], mut f: F) -> bool
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        // TODO: implement
-        false
+        let path = path.join("/");
+        let Ok(entries) = self.vfs.read_dir(&path) else {
+            return false;
+        };
+        for path in entries {
+            let meta = self.vfs.metadata(&path).unwrap();
+            let kind = match meta.file_type {
+                vfs::VfsFileType::File => EntryKind::File,
+                vfs::VfsFileType::Directory => EntryKind::Dir,
+            };
+            let fname = path.split('/').last().unwrap();
+            f(kind, fname.as_bytes());
+        }
+        true
     }
 }
 
