@@ -9,11 +9,12 @@ use vfs::FileSystem;
 struct Vfs;
 
 pub struct DeviceImpl {
-    start:      std::time::Instant,
-    gilrs:      Gilrs,
-    gamepad_id: Option<GamepadId>,
-    input:      InputState,
-    vfs:        vfs::impls::embedded::EmbeddedFS<Vfs>,
+    // start:      std::time::Instant,
+    // gilrs:      Gilrs,
+    // gamepad_id: Option<GamepadId>,
+    // input:      InputState,
+    vfs:    vfs::impls::embedded::EmbeddedFS<Vfs>,
+    window: web_sys::Window,
 }
 
 impl Device for DeviceImpl {

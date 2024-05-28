@@ -9,6 +9,7 @@ gilrs = "0.10.6"
 rust-embed = "*"
 vfs = { version = "*", features = ["embedded-fs"] }
 wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }
+web-sys = { version = "0.3.69", features = ["Window"] }
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 embedded-io = { version = "0.6.1", features = ["std"] }
