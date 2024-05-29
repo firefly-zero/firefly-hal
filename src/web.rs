@@ -27,7 +27,7 @@ pub struct DeviceImpl {
 
 impl DeviceImpl {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new(_: std::path::PathBuf) -> Self {
         let window = web_sys::window().unwrap();
         Self {
             gamepad: GamepadManager::new(),
