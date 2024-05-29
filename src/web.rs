@@ -94,11 +94,12 @@ impl Device for DeviceImpl {
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        let path = path.join("/");
-        let Ok(entries) = self.vfs.read_dir(&format!("/{path}")) else {
+        let root = path.join("/");
+        let Ok(entries) = self.vfs.read_dir(&format!("/{root}")) else {
             return false;
         };
         for path in entries {
+            let path = format!("/{root}/{path}");
             let meta = self.vfs.metadata(&path).unwrap();
             let kind = match meta.file_type {
                 vfs::VfsFileType::File => EntryKind::File,
