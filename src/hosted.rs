@@ -2,7 +2,6 @@ use crate::gamepad::GamepadManager;
 use crate::shared::*;
 use core::fmt::Display;
 use std::path::PathBuf;
-use std::time::Duration;
 
 pub struct DeviceImpl {
     start:   std::time::Instant,
@@ -29,14 +28,16 @@ impl Device for DeviceImpl {
     type Read = File;
     type Write = File;
 
-    fn now(&self) -> Time {
+    fn now(&self) -> Instant {
         let now = std::time::Instant::now();
         let dur = now.duration_since(self.start);
-        fugit::Instant::<u32, 1, 1000>::from_ticks(dur.as_millis() as u32)
+        Instant {
+            ns: dur.as_nanos() as u32,
+        }
     }
 
-    fn delay(&self, d: Delay) {
-        let dur = Duration::from_millis(d.to_millis() as u64);
+    fn delay(&self, d: Duration) {
+        let dur = core::time::Duration::from_nanos(d.ns as u64);
         std::thread::sleep(dur);
     }
 

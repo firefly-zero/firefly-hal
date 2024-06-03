@@ -41,11 +41,13 @@ impl Device for DeviceImpl {
     type Read = FileR;
     type Write = FileW;
 
-    fn now(&self) -> Time {
-        Time::from_ticks(self.perf.now() as u32)
+    fn now(&self) -> Instant {
+        Instant {
+            ns: self.perf.now() as u32 * 1_000_000,
+        }
     }
 
-    fn delay(&self, _d: Delay) {
+    fn delay(&self, _d: Duration) {
         // TODO: find a way to block the thread.
     }
 

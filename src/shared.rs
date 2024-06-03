@@ -1,8 +1,46 @@
 use core::fmt::Display;
-use fugit::{Instant, MillisDurationU32};
+use core::ops::Sub;
 
-pub type Time = Instant<u32, 1, 1000>;
-pub type Delay = MillisDurationU32;
+/// A moment in time. Obtained from [Device::now].
+#[derive(Copy, Clone)]
+pub struct Instant {
+    pub(crate) ns: u32,
+}
+
+impl Sub for Instant {
+    type Output = Duration;
+
+    fn sub(self, rhs: Self) -> Duration {
+        Duration {
+            ns: self.ns.saturating_sub(rhs.ns),
+        }
+    }
+}
+
+/// Difference between two [Instant]'s. Used by [Device::delay].
+#[derive(PartialEq, PartialOrd, Copy, Clone)]
+pub struct Duration {
+    pub(crate) ns: u32,
+}
+
+impl Duration {
+    /// Given the desired frames per second, get the duration of a single frame.
+    pub fn from_fps(fps: u32) -> Self {
+        Self {
+            ns: 1_000_000_000 / fps,
+        }
+    }
+}
+
+impl Sub for Duration {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self {
+        Self {
+            ns: self.ns - rhs.ns,
+        }
+    }
+}
 
 pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
@@ -17,7 +55,7 @@ pub trait Device {
     ///
     /// [rtic_time.Monotonic]: https://docs.rs/rtic-time/latest/rtic_time/trait.Monotonic.html
     /// [rtic_monotonic.Monotonic]: https://docs.rs/rtic-monotonic/latest/rtic_monotonic/trait.Monotonic.html
-    fn now(&self) -> Time;
+    fn now(&self) -> Instant;
 
     /// Suspends the current thread for the given duration.
     ///
@@ -26,7 +64,7 @@ pub trait Device {
     /// Usually implemented as [embedded_hal.DelayNs].
     ///
     /// [embedded_hal.DelayNs]: https://docs.rs/embedded-hal/1.0.0/embedded_hal/delay/trait.DelayNs.html
-    fn delay(&self, d: Delay);
+    fn delay(&self, d: Duration);
 
     /// Read gamepad input.
     fn read_input(&mut self) -> Option<InputState>;
