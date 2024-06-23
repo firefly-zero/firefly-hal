@@ -63,6 +63,9 @@ impl Device for DeviceImpl {
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
         let path: PathBuf = path.iter().collect();
         let path = self.root.join(path);
+        if let Some(parent) = path.parent() {
+            _ = std::fs::create_dir_all(parent);
+        }
         let file = std::fs::File::create(path).ok()?;
         Some(File { file })
     }
