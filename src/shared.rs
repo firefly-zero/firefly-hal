@@ -45,6 +45,7 @@ impl Sub for Duration {
 pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
     type Write: embedded_io::Write;
+    type Network: Network;
 
     /// The current time.
     ///
@@ -135,6 +136,26 @@ pub trait Device {
     fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
     where
         F: FnMut(EntryKind, &[u8]);
+
+    fn network(&self) -> Self::Network;
+}
+
+pub trait Network {
+    type Read: embedded_io::Read;
+    type Write: embedded_io::Write;
+    type Addr;
+
+    /// Update the internal state: connect devices, send ping, etc.
+    fn update(&mut self);
+
+    /// Get the list of connected devices.
+    fn conn(&mut self) -> &[Self::Addr];
+
+    /// Get a pending message, if any. Non-blocking.
+    fn recv(&mut self) -> Option<(Self::Addr, Self::Read)>;
+
+    /// Send a raw message to the given device. Blocking.
+    fn send(&mut self, addr: Self::Addr) -> Option<Self::Write>;
 }
 
 pub enum EntryKind {
@@ -159,3 +180,12 @@ pub struct InputState {
 //   (param $alignment i32)
 //   (param $newSize i32)
 //   (result i32))
+
+// sample rate
+// channels
+
+// volume
+// speed
+// play/pause
+// stop
+// play_next

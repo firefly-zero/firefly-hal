@@ -25,6 +25,7 @@ impl DeviceImpl {
 }
 
 impl Device for DeviceImpl {
+    type Network = NetworkImpl;
     type Read = File;
     type Write = File;
 
@@ -122,6 +123,10 @@ impl Device for DeviceImpl {
         }
         true
     }
+
+    fn network(&self) -> Self::Network {
+        NetworkImpl::new()
+    }
 }
 
 pub struct File {
@@ -155,5 +160,67 @@ impl embedded_io::Write for File {
 
     fn flush(&mut self) -> Result<(), Self::Error> {
         std::io::Write::flush(&mut self.file)
+    }
+}
+
+pub struct NetworkImpl {}
+
+impl NetworkImpl {
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Network for NetworkImpl {
+    type Addr = std::net::SocketAddr;
+    type Read = NetReader;
+    type Write = NetWriter;
+
+    fn update(&mut self) {
+        todo!()
+    }
+
+    fn conn(&mut self) -> &[Self::Addr] {
+        todo!()
+    }
+
+    fn recv(&mut self) -> Option<(Self::Addr, Self::Read)> {
+        todo!()
+    }
+
+    fn send(&mut self, _addr: Self::Addr) -> Option<Self::Write> {
+        todo!()
+    }
+}
+
+pub struct NetReader {
+    _addr: std::net::SocketAddr,
+}
+
+impl embedded_io::ErrorType for NetReader {
+    type Error = std::io::Error;
+}
+
+impl embedded_io::Read for NetReader {
+    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Self::Error> {
+        todo!()
+    }
+}
+
+pub struct NetWriter {
+    _addr: std::net::SocketAddr,
+}
+
+impl embedded_io::ErrorType for NetWriter {
+    type Error = std::io::Error;
+}
+
+impl embedded_io::Write for NetWriter {
+    fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        todo!()
     }
 }
