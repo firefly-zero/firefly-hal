@@ -4,7 +4,9 @@ use core::ops::Sub;
 
 pub enum NetworkError {
     NotInitialized,
+    AlreadyInitialized,
     UnknownPeer,
+    PeerListFull,
     Other(u32),
 }
 
@@ -13,7 +15,9 @@ impl Display for NetworkError {
         use NetworkError::*;
         match self {
             NotInitialized => write!(f, "cannot send messages with Wi-Fi turned off"),
+            AlreadyInitialized => write!(f, "tried to initialize networking twice"),
             UnknownPeer => write!(f, "cannot send messages to disconnected device"),
+            PeerListFull => write!(f, "cannot connect more devices"),
             Other(n) => write!(f, "network error #{n}"),
         }
     }
@@ -158,13 +162,13 @@ pub trait Device {
     fn network(&self) -> Self::Network;
 }
 
-type NetworkResult<T> = Result<T, NetworkError>;
+pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
 
 pub trait Network {
     type Addr;
 
-    fn start(&mut self);
-    fn stop(&mut self);
+    fn start(&mut self) -> NetworkResult<()>;
+    fn stop(&mut self) -> NetworkResult<()>;
     fn advertise(&mut self) -> NetworkResult<()>;
 
     /// Get the list of connected devices.

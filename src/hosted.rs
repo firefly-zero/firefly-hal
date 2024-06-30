@@ -1,7 +1,21 @@
 use crate::gamepad::GamepadManager;
 use crate::shared::*;
 use core::fmt::Display;
+use core::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::UdpSocket;
 use std::path::PathBuf;
+
+static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+static ADDRESSES: &[SocketAddr] = &[
+    SocketAddr::new(LOCALHOST, 3110),
+    SocketAddr::new(LOCALHOST, 3111),
+    SocketAddr::new(LOCALHOST, 3112),
+    SocketAddr::new(LOCALHOST, 3113),
+    SocketAddr::new(LOCALHOST, 3114),
+    SocketAddr::new(LOCALHOST, 3115),
+    SocketAddr::new(LOCALHOST, 3116),
+    SocketAddr::new(LOCALHOST, 3117),
+];
 
 pub struct DeviceImpl {
     start:   std::time::Instant,
@@ -163,38 +177,76 @@ impl embedded_io::Write for File {
     }
 }
 
-pub struct NetworkImpl {}
+pub struct NetworkImpl {
+    socket: Option<UdpSocket>,
+    peers:  heapless::Vec<SocketAddr, 4>,
+}
 
 impl NetworkImpl {
     fn new() -> Self {
-        Self {}
+        Self {
+            socket: None,
+            peers:  heapless::Vec::new(),
+        }
     }
 }
 
 impl Network for NetworkImpl {
-    type Addr = std::net::SocketAddr;
+    type Addr = SocketAddr;
 
-    fn start(&mut self) {
-        todo!()
+    fn start(&mut self) -> NetworkResult<()> {
+        if self.socket.is_some() {
+            return Err(NetworkError::AlreadyInitialized);
+        }
+        let socket = match UdpSocket::bind(ADDRESSES) {
+            Ok(socket) => socket,
+            Err(_) => return Err(NetworkError::Other(0)),
+        };
+        self.socket = Some(socket);
+        Ok(())
     }
 
-    fn stop(&mut self) {
-        todo!()
+    fn stop(&mut self) -> NetworkResult<()> {
+        if self.socket.is_none() {
+            return Err(NetworkError::NotInitialized);
+        }
+        self.socket = None;
+        Ok(())
     }
 
-    fn advertise(&mut self) -> Result<(), NetworkError> {
-        todo!()
+    fn advertise(&mut self) -> NetworkResult<()> {
+        let Some(socket) = &self.socket else {
+            return Err(NetworkError::NotInitialized);
+        };
+        let local_addr = socket.local_addr().ok();
+        // TODO: use broadcast or multicast
+        for addr in ADDRESSES {
+            if let Some(local_addr) = local_addr {
+                if addr == &local_addr {
+                    continue;
+                }
+            }
+            _ = socket.send_to(b"HELLO", addr);
+        }
+        Ok(())
     }
 
     fn peers(&mut self) -> &[Self::Addr] {
+        &self.peers
+    }
+
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
         todo!()
     }
 
-    fn recv(&mut self) -> Result<Option<(Self::Addr, heapless::Vec<u8, 64>)>, NetworkError> {
-        todo!()
-    }
-
-    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> Result<(), NetworkError> {
-        todo!()
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+        let Some(socket) = &self.socket else {
+            return Err(NetworkError::NotInitialized);
+        };
+        let res = socket.send_to(data, addr);
+        if res.is_err() {
+            return Err(NetworkError::Other(0));
+        }
+        Ok(())
     }
 }
