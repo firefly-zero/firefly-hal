@@ -173,54 +173,28 @@ impl NetworkImpl {
 
 impl Network for NetworkImpl {
     type Addr = std::net::SocketAddr;
-    type Read = NetReader;
-    type Write = NetWriter;
 
-    fn update(&mut self) {
+    fn start(&mut self) {
         todo!()
     }
 
-    fn conn(&mut self) -> &[Self::Addr] {
+    fn stop(&mut self) {
         todo!()
     }
 
-    fn recv(&mut self) -> Option<(Self::Addr, Self::Read)> {
+    fn advertise(&mut self) -> Result<(), NetworkError> {
         todo!()
     }
 
-    fn send(&mut self, _addr: Self::Addr) -> Option<Self::Write> {
-        todo!()
-    }
-}
-
-pub struct NetReader {
-    _addr: std::net::SocketAddr,
-}
-
-impl embedded_io::ErrorType for NetReader {
-    type Error = std::io::Error;
-}
-
-impl embedded_io::Read for NetReader {
-    fn read(&mut self, _buf: &mut [u8]) -> Result<usize, Self::Error> {
-        todo!()
-    }
-}
-
-pub struct NetWriter {
-    _addr: std::net::SocketAddr,
-}
-
-impl embedded_io::ErrorType for NetWriter {
-    type Error = std::io::Error;
-}
-
-impl embedded_io::Write for NetWriter {
-    fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
+    fn peers(&mut self) -> &[Self::Addr] {
         todo!()
     }
 
-    fn flush(&mut self) -> Result<(), Self::Error> {
+    fn recv(&mut self) -> Result<Option<(Self::Addr, heapless::Vec<u8, 64>)>, NetworkError> {
+        todo!()
+    }
+
+    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> Result<(), NetworkError> {
         todo!()
     }
 }

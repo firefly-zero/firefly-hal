@@ -1,5 +1,23 @@
+use core::fmt;
 use core::fmt::Display;
 use core::ops::Sub;
+
+pub enum NetworkError {
+    NotInitialized,
+    UnknownPeer,
+    Other(u32),
+}
+
+impl Display for NetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use NetworkError::*;
+        match self {
+            NotInitialized => write!(f, "cannot send messages with Wi-Fi turned off"),
+            UnknownPeer => write!(f, "cannot send messages to disconnected device"),
+            Other(n) => write!(f, "network error #{n}"),
+        }
+    }
+}
 
 /// A moment in time. Obtained from [Device::now].
 #[derive(Copy, Clone)]
@@ -140,22 +158,23 @@ pub trait Device {
     fn network(&self) -> Self::Network;
 }
 
+type NetworkResult<T> = Result<T, NetworkError>;
+
 pub trait Network {
-    type Read: embedded_io::Read;
-    type Write: embedded_io::Write;
     type Addr;
 
-    /// Update the internal state: connect devices, send ping, etc.
-    fn update(&mut self);
+    fn start(&mut self);
+    fn stop(&mut self);
+    fn advertise(&mut self) -> NetworkResult<()>;
 
     /// Get the list of connected devices.
-    fn conn(&mut self) -> &[Self::Addr];
+    fn peers(&mut self) -> &[Self::Addr];
 
     /// Get a pending message, if any. Non-blocking.
-    fn recv(&mut self) -> Option<(Self::Addr, Self::Read)>;
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>>;
 
     /// Send a raw message to the given device. Blocking.
-    fn send(&mut self, addr: Self::Addr) -> Option<Self::Write>;
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
 }
 
 pub enum EntryKind {
