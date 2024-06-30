@@ -236,7 +236,20 @@ impl Network for NetworkImpl {
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        todo!()
+        let Some(socket) = &self.socket else {
+            return Err(NetworkError::NotInitialized);
+        };
+        let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+        let Ok((_, addr)) = socket.recv_from(&mut buf) else {
+            return Ok(None);
+        };
+        if !self.peers.contains(&addr) {
+            let res = self.peers.push(addr);
+            if res.is_err() {
+                return Err(NetworkError::PeerListFull);
+            }
+        }
+        Ok(Some((addr, buf)))
     }
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
