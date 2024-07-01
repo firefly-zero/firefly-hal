@@ -179,15 +179,11 @@ impl embedded_io::Write for File {
 
 pub struct NetworkImpl {
     socket: Option<UdpSocket>,
-    peers:  heapless::Vec<SocketAddr, 4>,
 }
 
 impl NetworkImpl {
     fn new() -> Self {
-        Self {
-            socket: None,
-            peers:  heapless::Vec::new(),
-        }
+        Self { socket: None }
     }
 }
 
@@ -231,10 +227,6 @@ impl Network for NetworkImpl {
         Ok(())
     }
 
-    fn peers(&mut self) -> &[Self::Addr] {
-        &self.peers
-    }
-
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
         let Some(socket) = &self.socket else {
             return Err(NetworkError::NotInitialized);
@@ -243,12 +235,6 @@ impl Network for NetworkImpl {
         let Ok((_, addr)) = socket.recv_from(&mut buf) else {
             return Ok(None);
         };
-        if !self.peers.contains(&addr) {
-            let res = self.peers.push(addr);
-            if res.is_err() {
-                return Err(NetworkError::PeerListFull);
-            }
-        }
         Ok(Some((addr, buf)))
     }
 

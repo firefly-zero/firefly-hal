@@ -6,7 +6,6 @@ pub enum NetworkError {
     NotInitialized,
     AlreadyInitialized,
     UnknownPeer,
-    PeerListFull,
     Other(u32),
 }
 
@@ -51,6 +50,10 @@ impl Duration {
         Self {
             ns: 1_000_000_000 / fps,
         }
+    }
+
+    pub const fn from_ms(ms: u32) -> Self {
+        Self { ns: ms * 1_000_000 }
     }
 }
 
@@ -170,9 +173,6 @@ pub trait Network {
     fn start(&mut self) -> NetworkResult<()>;
     fn stop(&mut self) -> NetworkResult<()>;
     fn advertise(&mut self) -> NetworkResult<()>;
-
-    /// Get the list of connected devices.
-    fn peers(&mut self) -> &[Self::Addr];
 
     /// Get a pending message, if any. Non-blocking.
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>>;
