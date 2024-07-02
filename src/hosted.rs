@@ -235,12 +235,23 @@ impl Network for NetworkImpl {
             return Err(NetworkError::NotInitialized);
         };
         let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+        socket.set_nonblocking(true).unwrap();
         if socket.peek_from(&mut buf).is_err() {
             return Ok(None);
         }
-        let Ok((_, addr)) = socket.recv_from(&mut buf) else {
-            return Ok(None);
+        let (size, addr) = match socket.recv_from(&mut buf) {
+            Ok(val) => val,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    return Ok(None);
+                }
+                return Err(NetworkError::RecvError);
+            }
         };
+        if size == 0 {
+            return Ok(None);
+        }
+        buf.truncate(size);
         Ok(Some((addr, buf)))
     }
 
@@ -250,7 +261,7 @@ impl Network for NetworkImpl {
         };
         let res = socket.send_to(data, addr);
         if res.is_err() {
-            return Err(NetworkError::Other(0));
+            return Err(NetworkError::SendError);
         }
         Ok(())
     }

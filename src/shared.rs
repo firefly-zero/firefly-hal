@@ -6,6 +6,9 @@ pub enum NetworkError {
     NotInitialized,
     AlreadyInitialized,
     UnknownPeer,
+    PeerListFull,
+    RecvError,
+    SendError,
     Other(u32),
 }
 
@@ -17,6 +20,8 @@ impl Display for NetworkError {
             AlreadyInitialized => write!(f, "tried to initialize networking twice"),
             UnknownPeer => write!(f, "cannot send messages to disconnected device"),
             PeerListFull => write!(f, "cannot connect more devices"),
+            RecvError => write!(f, "cannot fetch network message"),
+            SendError => write!(f, "cannot send network message"),
             Other(n) => write!(f, "network error #{n}"),
         }
     }
