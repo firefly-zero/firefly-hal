@@ -6,9 +6,12 @@ pub enum NetworkError {
     NotInitialized,
     AlreadyInitialized,
     UnknownPeer,
+    CannotBind,
     PeerListFull,
     RecvError,
     SendError,
+    NetThreadDeallocated,
+    OutMessageTooBig,
     Other(u32),
 }
 
@@ -19,9 +22,12 @@ impl Display for NetworkError {
             NotInitialized => write!(f, "cannot send messages with Wi-Fi turned off"),
             AlreadyInitialized => write!(f, "tried to initialize networking twice"),
             UnknownPeer => write!(f, "cannot send messages to disconnected device"),
+            CannotBind => write!(f, "cannot find free address for networking"),
             PeerListFull => write!(f, "cannot connect more devices"),
             RecvError => write!(f, "cannot fetch network message"),
             SendError => write!(f, "cannot send network message"),
+            NetThreadDeallocated => write!(f, "thread handling networking is already deallocated"),
+            OutMessageTooBig => write!(f, "outgoing message is too big"),
             Other(n) => write!(f, "network error #{n}"),
         }
     }

@@ -1,5 +1,6 @@
 use crate::gamepad::GamepadManager;
 use crate::shared::*;
+use core::cell::Cell;
 use core::fmt::Display;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::net::UdpSocket;
@@ -179,18 +180,21 @@ impl embedded_io::Write for File {
 }
 
 pub struct NetworkImpl {
-    // worker: std::thread::JoinHandle<()>,
-    r_in:  mpsc::Receiver<Message>,
-    s_out: mpsc::Sender<Message>,
+    worker: Cell<Option<UdpWorker>>,
+    r_in:   mpsc::Receiver<Message>,
+    s_out:  mpsc::Sender<Message>,
 }
 
 impl NetworkImpl {
     fn new() -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
-        let worker = UdpWorker { s_in, r_out };
-        _ = worker.start(); // TODO: handle error
-        Self { r_in, s_out }
+        let worker = Cell::new(Some(UdpWorker { s_in, r_out }));
+        Self {
+            worker,
+            r_in,
+            s_out,
+        }
     }
 }
 
@@ -198,6 +202,11 @@ impl Network for NetworkImpl {
     type Addr = SocketAddr;
 
     fn start(&mut self) -> NetworkResult<()> {
+        let worker = self.worker.replace(None);
+        let Some(worker) = worker else {
+            return Err(NetworkError::AlreadyInitialized);
+        };
+        worker.start()?;
         Ok(())
     }
 
@@ -206,9 +215,12 @@ impl Network for NetworkImpl {
     }
 
     fn advertise(&mut self) -> NetworkResult<()> {
+        let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
         for addr in ADDRESSES {
-            let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
-            self.s_out.send((*addr, hello)).unwrap();
+            let res = self.s_out.send((*addr, hello.clone()));
+            if res.is_err() {
+                return Err(NetworkError::NetThreadDeallocated);
+            }
         }
         Ok(())
     }
@@ -218,8 +230,13 @@ impl Network for NetworkImpl {
     }
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        let msg = heapless::Vec::from_slice(data).unwrap();
-        self.s_out.send((addr, msg)).unwrap();
+        let Ok(msg) = heapless::Vec::from_slice(data) else {
+            return Err(NetworkError::OutMessageTooBig);
+        };
+        let res = self.s_out.send((addr, msg));
+        if res.is_err() {
+            return Err(NetworkError::NetThreadDeallocated);
+        }
         Ok(())
     }
 }
@@ -235,7 +252,7 @@ impl UdpWorker {
     fn start(self) -> Result<std::thread::JoinHandle<()>, NetworkError> {
         let socket = match UdpSocket::bind(ADDRESSES) {
             Ok(socket) => socket,
-            Err(_) => return Err(NetworkError::Other(0)),
+            Err(_) => return Err(NetworkError::CannotBind),
         };
         let timeout = std::time::Duration::from_millis(10);
         socket.set_read_timeout(Some(timeout)).unwrap();
