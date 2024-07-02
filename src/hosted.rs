@@ -4,6 +4,7 @@ use core::fmt::Display;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::net::UdpSocket;
 use std::path::PathBuf;
+use std::sync::mpsc;
 
 static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 static ADDRESSES: &[SocketAddr] = &[
@@ -178,12 +179,18 @@ impl embedded_io::Write for File {
 }
 
 pub struct NetworkImpl {
-    socket: Option<UdpSocket>,
+    // worker: std::thread::JoinHandle<()>,
+    r_in:  mpsc::Receiver<Message>,
+    s_out: mpsc::Sender<Message>,
 }
 
 impl NetworkImpl {
     fn new() -> Self {
-        Self { socket: None }
+        let (s_in, r_in) = mpsc::channel();
+        let (s_out, r_out) = mpsc::channel();
+        let worker = UdpWorker { s_in, r_out };
+        _ = worker.start(); // TODO: handle error
+        Self { r_in, s_out }
     }
 }
 
@@ -191,9 +198,41 @@ impl Network for NetworkImpl {
     type Addr = SocketAddr;
 
     fn start(&mut self) -> NetworkResult<()> {
-        if self.socket.is_some() {
-            return Err(NetworkError::AlreadyInitialized);
+        Ok(())
+    }
+
+    fn stop(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn advertise(&mut self) -> NetworkResult<()> {
+        for addr in ADDRESSES {
+            let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
+            self.s_out.send((*addr, hello)).unwrap();
         }
+        Ok(())
+    }
+
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
+        Ok(self.r_in.try_recv().ok())
+    }
+
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+        let msg = heapless::Vec::from_slice(data).unwrap();
+        self.s_out.send((addr, msg)).unwrap();
+        Ok(())
+    }
+}
+
+type Message = (SocketAddr, heapless::Vec<u8, 64>);
+
+struct UdpWorker {
+    s_in:  mpsc::Sender<Message>,
+    r_out: mpsc::Receiver<Message>,
+}
+
+impl UdpWorker {
+    fn start(self) -> Result<std::thread::JoinHandle<()>, NetworkError> {
         let socket = match UdpSocket::bind(ADDRESSES) {
             Ok(socket) => socket,
             Err(_) => return Err(NetworkError::Other(0)),
@@ -201,68 +240,23 @@ impl Network for NetworkImpl {
         if let Ok(addr) = socket.local_addr() {
             println!("listening on {addr}");
         }
-        self.socket = Some(socket);
-        Ok(())
-    }
-
-    fn stop(&mut self) -> NetworkResult<()> {
-        if self.socket.is_none() {
-            return Err(NetworkError::NotInitialized);
-        }
-        self.socket = None;
-        Ok(())
-    }
-
-    fn advertise(&mut self) -> NetworkResult<()> {
-        let Some(socket) = &self.socket else {
-            return Err(NetworkError::NotInitialized);
-        };
-        let local_addr = socket.local_addr().ok();
-        // TODO: use broadcast or multicast
-        for addr in ADDRESSES {
-            if let Some(local_addr) = local_addr {
-                if addr == &local_addr {
-                    continue;
-                }
+        let timeout = std::time::Duration::from_millis(10);
+        socket.set_read_timeout(Some(timeout)).unwrap();
+        let handle = std::thread::spawn(move || loop {
+            let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+            if let Ok((size, addr)) = socket.recv_from(&mut buf) {
+                buf.truncate(size);
+                self.s_in.send((addr, buf)).unwrap();
             }
-            _ = socket.send_to(b"HELLO", addr);
-        }
-        Ok(())
-    }
-
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        let Some(socket) = &self.socket else {
-            return Err(NetworkError::NotInitialized);
-        };
-        let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
-        socket.set_nonblocking(true).unwrap();
-        if socket.peek_from(&mut buf).is_err() {
-            return Ok(None);
-        }
-        let (size, addr) = match socket.recv_from(&mut buf) {
-            Ok(val) => val,
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    return Ok(None);
+            if let Ok((addr, buf)) = self.r_out.try_recv() {
+                if let Ok(local_addr) = socket.local_addr() {
+                    if local_addr == addr {
+                        continue;
+                    }
                 }
-                return Err(NetworkError::RecvError);
+                socket.send_to(&buf, addr).unwrap();
             }
-        };
-        if size == 0 {
-            return Ok(None);
-        }
-        buf.truncate(size);
-        Ok(Some((addr, buf)))
-    }
-
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        let Some(socket) = &self.socket else {
-            return Err(NetworkError::NotInitialized);
-        };
-        let res = socket.send_to(data, addr);
-        if res.is_err() {
-            return Err(NetworkError::SendError);
-        }
-        Ok(())
+        });
+        Ok(handle)
     }
 }
