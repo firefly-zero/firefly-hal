@@ -237,16 +237,18 @@ impl UdpWorker {
             Ok(socket) => socket,
             Err(_) => return Err(NetworkError::Other(0)),
         };
+        let timeout = std::time::Duration::from_millis(10);
+        socket.set_read_timeout(Some(timeout)).unwrap();
         if let Ok(addr) = socket.local_addr() {
             println!("listening on {addr}");
         }
-        let timeout = std::time::Duration::from_millis(10);
-        socket.set_read_timeout(Some(timeout)).unwrap();
         let handle = std::thread::spawn(move || loop {
-            let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+            let mut buf = vec![0; 64];
             if let Ok((size, addr)) = socket.recv_from(&mut buf) {
-                buf.truncate(size);
-                self.s_in.send((addr, buf)).unwrap();
+                if size > 0 {
+                    let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
+                    self.s_in.send((addr, buf)).unwrap();
+                }
             }
             if let Ok((addr, buf)) = self.r_out.try_recv() {
                 if let Ok(local_addr) = socket.local_addr() {
