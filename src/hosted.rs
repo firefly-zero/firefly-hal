@@ -198,6 +198,9 @@ impl Network for NetworkImpl {
             Ok(socket) => socket,
             Err(_) => return Err(NetworkError::Other(0)),
         };
+        if let Ok(addr) = socket.local_addr() {
+            println!("listening on {addr}");
+        }
         self.socket = Some(socket);
         Ok(())
     }
@@ -232,6 +235,9 @@ impl Network for NetworkImpl {
             return Err(NetworkError::NotInitialized);
         };
         let mut buf: heapless::Vec<u8, 64> = heapless::Vec::new();
+        if socket.peek_from(&mut buf).is_err() {
+            return Ok(None);
+        }
         let Ok((_, addr)) = socket.recv_from(&mut buf) else {
             return Ok(None);
         };
