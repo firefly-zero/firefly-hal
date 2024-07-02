@@ -183,17 +183,24 @@ pub struct NetworkImpl {
     worker: Cell<Option<UdpWorker>>,
     r_in:   mpsc::Receiver<Message>,
     s_out:  mpsc::Sender<Message>,
+    s_stop: mpsc::Sender<()>,
 }
 
 impl NetworkImpl {
     fn new() -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
-        let worker = Cell::new(Some(UdpWorker { s_in, r_out }));
+        let (s_stop, r_stop) = mpsc::channel();
+        let worker = Cell::new(Some(UdpWorker {
+            s_in,
+            r_out,
+            r_stop,
+        }));
         Self {
             worker,
             r_in,
             s_out,
+            s_stop,
         }
     }
 }
@@ -211,6 +218,7 @@ impl Network for NetworkImpl {
     }
 
     fn stop(&mut self) -> NetworkResult<()> {
+        _ = self.s_stop.send(());
         Ok(())
     }
 
@@ -244,8 +252,9 @@ impl Network for NetworkImpl {
 type Message = (SocketAddr, heapless::Vec<u8, 64>);
 
 struct UdpWorker {
-    s_in:  mpsc::Sender<Message>,
-    r_out: mpsc::Receiver<Message>,
+    s_in:   mpsc::Sender<Message>,
+    r_out:  mpsc::Receiver<Message>,
+    r_stop: mpsc::Receiver<()>,
 }
 
 impl UdpWorker {
@@ -260,6 +269,12 @@ impl UdpWorker {
             println!("listening on {addr}");
         }
         let handle = std::thread::spawn(move || loop {
+            match self.r_stop.try_recv() {
+                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
+                    break;
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
             let mut buf = vec![0; 64];
             if let Ok((size, addr)) = socket.recv_from(&mut buf) {
                 if size > 0 {
