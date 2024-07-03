@@ -20,9 +20,9 @@ static ADDRESSES: &[SocketAddr] = &[
 ];
 
 pub struct DeviceImpl {
-    start:   std::time::Instant,
+    start: std::time::Instant,
     gamepad: GamepadManager,
-    root:    PathBuf,
+    root: PathBuf,
 }
 
 impl DeviceImpl {
@@ -181,8 +181,8 @@ impl embedded_io::Write for File {
 
 pub struct NetworkImpl {
     worker: Cell<Option<UdpWorker>>,
-    r_in:   mpsc::Receiver<Message>,
-    s_out:  mpsc::Sender<Message>,
+    r_in: mpsc::Receiver<Message>,
+    s_out: mpsc::Sender<Message>,
     s_stop: mpsc::Sender<()>,
 }
 
@@ -252,8 +252,8 @@ impl Network for NetworkImpl {
 type Message = (SocketAddr, heapless::Vec<u8, 64>);
 
 struct UdpWorker {
-    s_in:   mpsc::Sender<Message>,
-    r_out:  mpsc::Receiver<Message>,
+    s_in: mpsc::Sender<Message>,
+    r_out: mpsc::Receiver<Message>,
     r_stop: mpsc::Receiver<()>,
 }
 

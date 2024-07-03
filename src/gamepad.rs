@@ -6,9 +6,9 @@ use gilrs::*;
 ///
 /// Shared between the hosted and the web device implementations.
 pub(crate) struct GamepadManager {
-    gilrs:      Gilrs,
+    gilrs: Gilrs,
     gamepad_id: Option<GamepadId>,
-    input:      InputState,
+    input: InputState,
 }
 
 impl GamepadManager {

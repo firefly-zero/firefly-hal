@@ -21,8 +21,8 @@ extern {
 pub struct DeviceImpl {
     // start:      std::time::Instant,
     gamepad: GamepadManager,
-    vfs:     vfs::impls::embedded::EmbeddedFS<Vfs>,
-    perf:    web_sys::Performance,
+    vfs: vfs::impls::embedded::EmbeddedFS<Vfs>,
+    perf: web_sys::Performance,
 }
 
 impl DeviceImpl {
@@ -31,8 +31,8 @@ impl DeviceImpl {
         let window = web_sys::window().unwrap();
         Self {
             gamepad: GamepadManager::new(),
-            vfs:     vfs::EmbeddedFS::new(),
-            perf:    window.performance().unwrap(),
+            vfs: vfs::EmbeddedFS::new(),
+            perf: window.performance().unwrap(),
         }
     }
 }

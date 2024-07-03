@@ -1,6 +1,6 @@
 pub struct DeviceImpl {
-    start:      std::time::Instant,
-    gilrs:      Gilrs,
+    start: std::time::Instant,
+    gilrs: Gilrs,
     gamepad_id: Option<GamepadId>,
 }
 

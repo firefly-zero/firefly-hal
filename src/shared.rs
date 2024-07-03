@@ -205,7 +205,7 @@ pub struct Pad {
 
 #[derive(Default, Clone, Debug)]
 pub struct InputState {
-    pub pad:     Option<Pad>,
+    pub pad: Option<Pad>,
     pub buttons: [bool; 5],
 }
 
