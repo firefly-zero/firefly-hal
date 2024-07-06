@@ -277,10 +277,11 @@ impl UdpWorker {
             }
             let mut buf = vec![0; 64];
             if let Ok((size, addr)) = socket.recv_from(&mut buf) {
-                if size > 0 {
-                    let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
-                    self.s_in.send((addr, buf)).unwrap();
+                if size == 0 {
+                    continue;
                 }
+                let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
+                _ = self.s_in.send((addr, buf));
             }
             if let Ok((addr, buf)) = self.r_out.try_recv() {
                 if let Ok(local_addr) = socket.local_addr() {
@@ -288,7 +289,7 @@ impl UdpWorker {
                         continue;
                     }
                 }
-                socket.send_to(&buf, addr).unwrap();
+                _ = socket.send_to(&buf, addr);
             }
         });
         Ok(handle)
