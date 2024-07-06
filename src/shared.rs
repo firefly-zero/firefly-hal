@@ -179,16 +179,25 @@ pub trait Device {
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
 
 pub trait Network {
-    type Addr;
+    /// The type representing the network address. Must be unique.
+    ///
+    /// For emulator, it is IP+port. For the physical device, it is MAC address.
+    type Addr: Ord;
 
     fn start(&mut self) -> NetworkResult<()>;
     fn stop(&mut self) -> NetworkResult<()>;
+
+    /// Network address of the current device as visible to the other peers.
+    ///
+    /// Used to sort all the peers, including the local one, in the same order
+    /// on all devices.
+    fn local_addr(&self) -> Self::Addr;
     fn advertise(&mut self) -> NetworkResult<()>;
 
     /// Get a pending message, if any. Non-blocking.
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>>;
 
-    /// Send a raw message to the given device. Blocking.
+    /// Send a raw message to the given device. Non-blocking.
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
 }
 

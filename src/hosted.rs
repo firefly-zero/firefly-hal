@@ -184,6 +184,7 @@ pub struct NetworkImpl {
     r_in: mpsc::Receiver<Message>,
     s_out: mpsc::Sender<Message>,
     s_stop: mpsc::Sender<()>,
+    local_addr: Option<SocketAddr>,
 }
 
 impl NetworkImpl {
@@ -201,6 +202,7 @@ impl NetworkImpl {
             r_in,
             s_out,
             s_stop,
+            local_addr: None,
         }
     }
 }
@@ -208,12 +210,17 @@ impl NetworkImpl {
 impl Network for NetworkImpl {
     type Addr = SocketAddr;
 
+    fn local_addr(&self) -> SocketAddr {
+        self.local_addr.unwrap()
+    }
+
     fn start(&mut self) -> NetworkResult<()> {
         let worker = self.worker.replace(None);
         let Some(worker) = worker else {
             return Err(NetworkError::AlreadyInitialized);
         };
-        worker.start()?;
+        let local_addr = worker.start()?;
+        self.local_addr = Some(local_addr);
         Ok(())
     }
 
@@ -258,7 +265,7 @@ struct UdpWorker {
 }
 
 impl UdpWorker {
-    fn start(self) -> Result<std::thread::JoinHandle<()>, NetworkError> {
+    fn start(self) -> Result<SocketAddr, NetworkError> {
         let socket = match UdpSocket::bind(ADDRESSES) {
             Ok(socket) => socket,
             Err(_) => return Err(NetworkError::CannotBind),
@@ -268,7 +275,8 @@ impl UdpWorker {
         if let Ok(addr) = socket.local_addr() {
             println!("listening on {addr}");
         }
-        let handle = std::thread::spawn(move || loop {
+        let local_addr = socket.local_addr().unwrap();
+        std::thread::spawn(move || loop {
             match self.r_stop.try_recv() {
                 Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
                     break;
@@ -284,14 +292,12 @@ impl UdpWorker {
                 _ = self.s_in.send((addr, buf));
             }
             if let Ok((addr, buf)) = self.r_out.try_recv() {
-                if let Ok(local_addr) = socket.local_addr() {
-                    if local_addr == addr {
-                        continue;
-                    }
+                if addr == local_addr {
+                    continue;
                 }
                 _ = socket.send_to(&buf, addr);
             }
         });
-        Ok(handle)
+        Ok(local_addr)
     }
 }
