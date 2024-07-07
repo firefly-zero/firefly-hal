@@ -212,10 +212,47 @@ pub struct Pad {
     pub y: i16,
 }
 
+impl From<(i16, i16)> for Pad {
+    fn from(value: (i16, i16)) -> Self {
+        Self {
+            x: value.0,
+            y: value.1,
+        }
+    }
+}
+
+impl From<Pad> for (i16, i16) {
+    fn from(value: Pad) -> Self {
+        (value.x, value.y)
+    }
+}
+
 #[derive(Default, Clone, Debug)]
 pub struct InputState {
     pub pad: Option<Pad>,
-    pub buttons: [bool; 5],
+    pub buttons: u8,
+}
+
+impl InputState {
+    pub fn a(&self) -> bool {
+        self.buttons & 0b1 > 0
+    }
+
+    pub fn b(&self) -> bool {
+        self.buttons & 0b10 > 0
+    }
+
+    pub fn x(&self) -> bool {
+        self.buttons & 0b100 > 0
+    }
+
+    pub fn y(&self) -> bool {
+        self.buttons & 0b1000 > 0
+    }
+
+    pub fn menu(&self) -> bool {
+        self.buttons & 0b10000 > 0
+    }
 }
 
 // (func (param $originalPtr i32)

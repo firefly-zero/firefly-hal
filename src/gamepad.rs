@@ -47,22 +47,20 @@ impl GamepadManager {
         } else {
             None
         };
-        let buttons = [
+        let buttons_array = [
             gamepad.is_pressed(Button::South), // A
             gamepad.is_pressed(Button::East),  // B
             gamepad.is_pressed(Button::West),  // X
             gamepad.is_pressed(Button::North), // Y
             gamepad.is_pressed(Button::Start),
         ];
+        let mut buttons = 0u8;
+        for b in buttons_array {
+            buttons = buttons << 1 | u8::from(b);
+        }
 
         // merge together input from gamepad and from keyboard
-        let buttons = [
-            self.input.buttons[0] || buttons[0],
-            self.input.buttons[1] || buttons[1],
-            self.input.buttons[2] || buttons[2],
-            self.input.buttons[3] || buttons[3],
-            self.input.buttons[4] || buttons[4],
-        ];
+        let buttons = self.input.buttons | buttons;
         let pad = match pad {
             Some(pad) => Some(pad),
             None => self.input.pad.clone(),
