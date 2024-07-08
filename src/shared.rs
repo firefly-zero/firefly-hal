@@ -253,6 +253,17 @@ impl InputState {
     pub fn menu(&self) -> bool {
         self.buttons & 0b10000 > 0
     }
+
+    #[must_use]
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            pad: match &self.pad {
+                Some(pad) => Some(pad.clone()),
+                None => other.pad.clone(),
+            },
+            buttons: self.buttons | other.buttons,
+        }
+    }
 }
 
 // (func (param $originalPtr i32)
