@@ -20,8 +20,11 @@ static ADDRESSES: &[SocketAddr] = &[
 ];
 
 pub struct DeviceImpl {
+    /// The time at which the device instance was created.
     start: std::time::Instant,
+    /// The shared logic for reading the gamepad input.
     gamepad: GamepadManager,
+    /// The full path to the VFS.
     root: PathBuf,
 }
 
