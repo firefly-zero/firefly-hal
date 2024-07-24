@@ -7,7 +7,7 @@ use std::net::UdpSocket;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+static IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 const PORT_MIN: u16 = 3110;
 const PORT_MAX: u16 = 3117;
 
@@ -227,7 +227,7 @@ impl Network for NetworkImpl {
     fn advertise(&mut self) -> NetworkResult<()> {
         let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
         for port in PORT_MIN..=PORT_MAX {
-            let addr = SocketAddr::new(LOCALHOST, port);
+            let addr = SocketAddr::new(IP, port);
             let res = self.s_out.send((addr, hello.clone()));
             if res.is_err() {
                 return Err(NetworkError::NetThreadDeallocated);
@@ -262,8 +262,8 @@ struct UdpWorker {
 
 impl UdpWorker {
     fn start(self) -> Result<SocketAddr, NetworkError> {
-        let addrs: Vec<_> = (PORT_MIN..PORT_MAX)
-            .map(|port| SocketAddr::new(LOCALHOST, port))
+        let addrs: Vec<_> = (PORT_MIN..=PORT_MAX)
+            .map(|port| SocketAddr::new(IP, port))
             .collect();
         let socket = match UdpSocket::bind(&addrs[..]) {
             Ok(socket) => socket,
