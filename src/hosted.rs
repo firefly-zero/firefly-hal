@@ -8,16 +8,8 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 
 static LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-static ADDRESSES: &[SocketAddr] = &[
-    SocketAddr::new(LOCALHOST, 3110),
-    SocketAddr::new(LOCALHOST, 3111),
-    SocketAddr::new(LOCALHOST, 3112),
-    SocketAddr::new(LOCALHOST, 3113),
-    SocketAddr::new(LOCALHOST, 3114),
-    SocketAddr::new(LOCALHOST, 3115),
-    SocketAddr::new(LOCALHOST, 3116),
-    SocketAddr::new(LOCALHOST, 3117),
-];
+const PORT_MIN: u16 = 3110;
+const PORT_MAX: u16 = 3117;
 
 pub struct DeviceImpl {
     /// The time at which the device instance was created.
@@ -234,8 +226,9 @@ impl Network for NetworkImpl {
 
     fn advertise(&mut self) -> NetworkResult<()> {
         let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
-        for addr in ADDRESSES {
-            let res = self.s_out.send((*addr, hello.clone()));
+        for port in PORT_MIN..=PORT_MAX {
+            let addr = SocketAddr::new(LOCALHOST, port);
+            let res = self.s_out.send((addr, hello.clone()));
             if res.is_err() {
                 return Err(NetworkError::NetThreadDeallocated);
             }
@@ -269,7 +262,10 @@ struct UdpWorker {
 
 impl UdpWorker {
     fn start(self) -> Result<SocketAddr, NetworkError> {
-        let socket = match UdpSocket::bind(ADDRESSES) {
+        let addrs: Vec<_> = (PORT_MIN..PORT_MAX)
+            .map(|port| SocketAddr::new(LOCALHOST, port))
+            .collect();
+        let socket = match UdpSocket::bind(&addrs[..]) {
             Ok(socket) => socket,
             Err(_) => return Err(NetworkError::CannotBind),
         };
