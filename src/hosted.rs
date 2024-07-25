@@ -3,7 +3,8 @@ use crate::shared::*;
 use core::cell::Cell;
 use core::fmt::Display;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::net::UdpSocket;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -37,6 +38,7 @@ impl DeviceImpl {
 
 impl Device for DeviceImpl {
     type Network = NetworkImpl;
+    type Serial = SerialImpl;
     type Read = File;
     type Write = File;
 
@@ -138,6 +140,10 @@ impl Device for DeviceImpl {
     fn network(&self) -> Self::Network {
         NetworkImpl::new()
     }
+
+    fn serial(&self) -> Self::Serial {
+        SerialImpl::new()
+    }
 }
 
 pub struct File {
@@ -176,8 +182,8 @@ impl embedded_io::Write for File {
 
 pub struct NetworkImpl {
     worker: Cell<Option<UdpWorker>>,
-    r_in: mpsc::Receiver<Message>,
-    s_out: mpsc::Sender<Message>,
+    r_in: mpsc::Receiver<NetMessage>,
+    s_out: mpsc::Sender<NetMessage>,
     s_stop: mpsc::Sender<()>,
     local_addr: Option<SocketAddr>,
 }
@@ -252,11 +258,69 @@ impl Network for NetworkImpl {
     }
 }
 
-type Message = (SocketAddr, heapless::Vec<u8, 64>);
+pub struct SerialImpl {
+    worker: Cell<Option<TcpWorker>>,
+    r_in: mpsc::Receiver<SerialMessage>,
+    s_out: mpsc::Sender<SerialMessage>,
+    s_stop: mpsc::Sender<()>,
+}
+
+impl SerialImpl {
+    fn new() -> Self {
+        let (s_in, r_in) = mpsc::channel();
+        let (s_out, r_out) = mpsc::channel();
+        let (s_stop, r_stop) = mpsc::channel();
+        let worker = TcpWorker {
+            s_in,
+            r_out,
+            r_stop,
+        };
+        let worker = Cell::new(Some(worker));
+        Self {
+            worker,
+            r_in,
+            s_out,
+            s_stop,
+        }
+    }
+}
+
+impl Serial for SerialImpl {
+    fn start(&mut self) -> NetworkResult<()> {
+        let worker = self.worker.replace(None);
+        let Some(worker) = worker else {
+            return Err(NetworkError::AlreadyInitialized);
+        };
+        worker.start()?;
+        Ok(())
+    }
+
+    fn stop(&mut self) -> NetworkResult<()> {
+        _ = self.s_stop.send(());
+        Ok(())
+    }
+
+    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>> {
+        Ok(self.r_in.try_recv().ok())
+    }
+
+    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        let Ok(msg) = heapless::Vec::from_slice(data) else {
+            return Err(NetworkError::OutMessageTooBig);
+        };
+        let res = self.s_out.send(msg);
+        if res.is_err() {
+            return Err(NetworkError::NetThreadDeallocated);
+        }
+        Ok(())
+    }
+}
+type NetMessage = (SocketAddr, heapless::Vec<u8, 64>);
+type SerialMessage = heapless::Vec<u8, 64>;
 
 struct UdpWorker {
-    s_in: mpsc::Sender<Message>,
-    r_out: mpsc::Receiver<Message>,
+    s_in: mpsc::Sender<NetMessage>,
+    r_out: mpsc::Receiver<NetMessage>,
     r_stop: mpsc::Receiver<()>,
 }
 
@@ -298,5 +362,61 @@ impl UdpWorker {
             }
         });
         Ok(local_addr)
+    }
+}
+
+struct TcpWorker {
+    s_in: mpsc::Sender<SerialMessage>,
+    r_out: mpsc::Receiver<SerialMessage>,
+    r_stop: mpsc::Receiver<()>,
+}
+
+impl TcpWorker {
+    fn start(self) -> Result<(), NetworkError> {
+        let addrs: Vec<_> = (PORT_MIN..=PORT_MAX)
+            .map(|port| SocketAddr::new(IP, port))
+            .collect();
+        let socket = match TcpListener::bind(&addrs[..]) {
+            Ok(socket) => socket,
+            Err(_) => return Err(NetworkError::CannotBind),
+        };
+        socket.set_nonblocking(true).unwrap();
+        if let Ok(addr) = socket.local_addr() {
+            println!("listening on {addr}");
+        }
+        std::thread::spawn(move || {
+            let mut streams = Vec::<TcpStream>::new();
+            loop {
+                match self.r_stop.try_recv() {
+                    Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
+                        break;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
+                }
+
+                match socket.accept() {
+                    Ok((stream, _addr)) => {
+                        stream.set_nonblocking(true).unwrap();
+                        streams.push(stream);
+                    }
+                    Err(_) => {}
+                };
+
+                for stream in &mut streams {
+                    let mut buf = vec![0; 64];
+                    let Ok(size) = stream.read_to_end(&mut buf) else {
+                        continue;
+                    };
+                    let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
+                    _ = self.s_in.send(buf);
+                }
+                if let Ok(buf) = self.r_out.try_recv() {
+                    for stream in &mut streams {
+                        _ = stream.write_all(&buf)
+                    }
+                }
+            }
+        });
+        Ok(())
     }
 }

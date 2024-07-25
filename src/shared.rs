@@ -82,6 +82,7 @@ pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
     type Write: embedded_io::Write;
     type Network: Network;
+    type Serial: Serial;
 
     /// The current time.
     ///
@@ -174,6 +175,11 @@ pub trait Device {
         F: FnMut(EntryKind, &[u8]);
 
     fn network(&self) -> Self::Network;
+
+    /// Access the USB serial port.
+    ///
+    /// Both read and write operations are non-blocking.
+    fn serial(&self) -> Self::Serial;
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
@@ -199,6 +205,13 @@ pub trait Network {
 
     /// Send a raw message to the given device. Non-blocking.
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
+}
+
+pub trait Serial {
+    fn start(&mut self) -> NetworkResult<()>;
+    fn stop(&mut self) -> NetworkResult<()>;
+    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>>;
+    fn send(&mut self, data: &[u8]) -> NetworkResult<()>;
 }
 
 pub enum EntryKind {
