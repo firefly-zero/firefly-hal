@@ -1,6 +1,7 @@
 use core::fmt;
 use core::fmt::Display;
 use core::ops::Sub;
+use std::ops::AddAssign;
 
 pub enum NetworkError {
     NotInitialized,
@@ -66,6 +67,10 @@ impl Duration {
     pub const fn from_ms(ms: u32) -> Self {
         Self { ns: ms * 1_000_000 }
     }
+
+    pub fn ns(&self) -> u32 {
+        self.ns
+    }
 }
 
 impl Sub for Duration {
@@ -75,6 +80,12 @@ impl Sub for Duration {
         Self {
             ns: self.ns - rhs.ns,
         }
+    }
+}
+
+impl AddAssign for Duration {
+    fn add_assign(&mut self, rhs: Self) {
+        self.ns += rhs.ns
     }
 }
 
