@@ -9,8 +9,10 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 
 static IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
-const PORT_MIN: u16 = 3110;
-const PORT_MAX: u16 = 3117;
+const UDP_PORT_MIN: u16 = 3110;
+const UDP_PORT_MAX: u16 = 3117;
+const TCP_PORT_MIN: u16 = 3210;
+const TCP_PORT_MAX: u16 = 3217;
 
 pub struct DeviceImpl {
     /// The time at which the device instance was created.
@@ -232,7 +234,7 @@ impl Network for NetworkImpl {
 
     fn advertise(&mut self) -> NetworkResult<()> {
         let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
-        for port in PORT_MIN..=PORT_MAX {
+        for port in UDP_PORT_MIN..=UDP_PORT_MAX {
             let addr = SocketAddr::new(IP, port);
             let res = self.s_out.send((addr, hello.clone()));
             if res.is_err() {
@@ -326,7 +328,7 @@ struct UdpWorker {
 
 impl UdpWorker {
     fn start(self) -> Result<SocketAddr, NetworkError> {
-        let addrs: Vec<_> = (PORT_MIN..=PORT_MAX)
+        let addrs: Vec<_> = (UDP_PORT_MIN..=UDP_PORT_MAX)
             .map(|port| SocketAddr::new(IP, port))
             .collect();
         let socket = match UdpSocket::bind(&addrs[..]) {
@@ -373,7 +375,7 @@ struct TcpWorker {
 
 impl TcpWorker {
     fn start(self) -> Result<(), NetworkError> {
-        let addrs: Vec<_> = (PORT_MIN..=PORT_MAX)
+        let addrs: Vec<_> = (TCP_PORT_MIN..=TCP_PORT_MAX)
             .map(|port| SocketAddr::new(IP, port))
             .collect();
         let socket = match TcpListener::bind(&addrs[..]) {
