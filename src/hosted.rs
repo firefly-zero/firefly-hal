@@ -338,7 +338,9 @@ impl UdpWorker {
         let timeout = std::time::Duration::from_millis(10);
         socket.set_read_timeout(Some(timeout)).unwrap();
         if let Ok(addr) = socket.local_addr() {
-            println!("listening on {addr}");
+            println!("listening on {addr}/udp");
+        } else {
+            println!("listening a UDP port");
         }
         let local_addr = socket.local_addr().unwrap();
         std::thread::spawn(move || loop {
@@ -384,7 +386,9 @@ impl TcpWorker {
         };
         socket.set_nonblocking(true).unwrap();
         if let Ok(addr) = socket.local_addr() {
-            println!("listening on {addr}");
+            println!("listening on {addr}/tcp");
+        } else {
+            println!("listening on a TCP port");
         }
         std::thread::spawn(move || {
             let mut streams = Vec::<TcpStream>::new();
@@ -406,9 +410,12 @@ impl TcpWorker {
 
                 for stream in &mut streams {
                     let mut buf = vec![0; 64];
-                    let Ok(size) = stream.read_to_end(&mut buf) else {
+                    let Ok(size) = stream.read(&mut buf) else {
                         continue;
                     };
+                    if size == 0 {
+                        continue;
+                    }
                     let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
                     _ = self.s_in.send(buf);
                 }
