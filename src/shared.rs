@@ -85,7 +85,7 @@ impl Sub for Duration {
 
 impl AddAssign for Duration {
     fn add_assign(&mut self, rhs: Self) {
-        self.ns += rhs.ns
+        self.ns = self.ns.saturating_add(rhs.ns)
     }
 }
 
