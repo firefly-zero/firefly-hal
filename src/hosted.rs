@@ -385,11 +385,6 @@ impl TcpWorker {
             Err(_) => return Err(NetworkError::CannotBind),
         };
         socket.set_nonblocking(true).unwrap();
-        if let Ok(addr) = socket.local_addr() {
-            println!("listening on {addr}/tcp");
-        } else {
-            println!("listening on a TCP port");
-        }
         std::thread::spawn(move || {
             let mut streams = Vec::<TcpStream>::new();
             loop {
