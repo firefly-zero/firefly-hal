@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 heapless = "0.8.0"
-wasmi = { git = "https://github.com/wasmi-labs/wasmi", default-features = false }
+wasmi = { version = "0.36.0", default-features = false }
 
 # hosted
 [target.'cfg(not(target_os = "none"))'.dependencies]
