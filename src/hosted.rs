@@ -386,7 +386,7 @@ impl TcpWorker {
         };
         socket.set_nonblocking(true).unwrap();
         std::thread::spawn(move || {
-            let mut streams = Vec::<TcpStream>::new();
+            let mut streams = RingBuf::new();
             loop {
                 match self.r_stop.try_recv() {
                     Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
@@ -403,7 +403,7 @@ impl TcpWorker {
                     Err(_) => {}
                 };
 
-                for stream in &mut streams {
+                for stream in streams.iter_mut() {
                     let mut buf = vec![0; 64];
                     let Ok(size) = stream.read(&mut buf) else {
                         continue;
@@ -415,12 +415,44 @@ impl TcpWorker {
                     _ = self.s_in.send(buf);
                 }
                 if let Ok(buf) = self.r_out.try_recv() {
-                    for stream in &mut streams {
+                    for stream in streams.iter_mut() {
                         _ = stream.write_all(&buf)
                     }
                 }
             }
         });
         Ok(())
+    }
+}
+
+/// A collection that holds 4 latest TCP connections.
+///
+/// If there are already 4 TCP connections and a new one comes in,
+/// the oldest one is dropped.
+struct RingBuf {
+    data: [Option<TcpStream>; 4],
+    next: usize,
+}
+
+impl RingBuf {
+    fn new() -> Self {
+        Self {
+            data: [None, None, None, None],
+            next: 0,
+        }
+    }
+
+    fn push(&mut self, val: TcpStream) {
+        self.data[self.next] = Some(val);
+        self.next = (self.next + 1) % 4
+    }
+
+    fn iter_mut(
+        &mut self,
+    ) -> std::iter::FilterMap<
+        core::slice::IterMut<Option<TcpStream>>,
+        impl FnMut(&mut Option<TcpStream>) -> Option<&mut TcpStream>,
+    > {
+        self.data.iter_mut().filter_map(Option::as_mut)
     }
 }
