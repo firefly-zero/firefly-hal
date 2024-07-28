@@ -395,12 +395,9 @@ impl TcpWorker {
                     Err(mpsc::TryRecvError::Empty) => {}
                 }
 
-                match socket.accept() {
-                    Ok((stream, _addr)) => {
-                        stream.set_nonblocking(true).unwrap();
-                        streams.push(stream);
-                    }
-                    Err(_) => {}
+                if let Ok((stream, _addr)) = socket.accept() {
+                    stream.set_nonblocking(true).unwrap();
+                    streams.push(stream);
                 };
 
                 for stream in streams.iter_mut() {
