@@ -8,7 +8,7 @@ use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-static IP: IpAddr = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+static IP: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
