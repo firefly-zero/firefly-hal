@@ -18,7 +18,7 @@ embedded-io = { version = "0.6.1", features = ["std"] }
 gilrs = "0.10.6"
 rust-embed = { version = "*", features = ["debug-embed"] }
 vfs = { version = "*", features = ["embedded-fs"] }
-wasm-bindgen = "*"
+wasm-bindgen = "0.2.93"
 web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
 
 # embedded
