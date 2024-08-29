@@ -11,6 +11,7 @@ wasmi = { version = "0.36.0", default-features = false }
 [target.'cfg(not(target_os = "none"))'.dependencies]
 embedded-io = { version = "0.6.1", features = ["std"] }
 gilrs = "0.10.6"
+rodio = { version = "0.19.0", default-features = false }
 
 # web
 [target.'cfg(target_family = "wasm")'.dependencies]
