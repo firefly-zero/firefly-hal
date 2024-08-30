@@ -139,6 +139,14 @@ impl Device for DeviceImpl {
         true
     }
 
+    fn has_headphones(&mut self) -> bool {
+        false
+    }
+
+    fn get_audio_buffer(&mut self) -> &mut [f32] {
+        todo!()
+    }
+
     fn network(&self) -> Self::Network {
         NetworkImpl::new()
     }

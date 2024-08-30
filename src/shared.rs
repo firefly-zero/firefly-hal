@@ -191,6 +191,12 @@ pub trait Device {
     ///
     /// Both read and write operations are non-blocking.
     fn serial(&self) -> Self::Serial;
+
+    /// Returns true if headphones are connected.
+    fn has_headphones(&mut self) -> bool;
+
+    /// Get a writable slice of free audio buffer region.
+    fn get_audio_buffer(&mut self) -> &mut [f32];
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
