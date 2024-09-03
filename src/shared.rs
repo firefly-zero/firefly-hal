@@ -3,6 +3,8 @@ use core::fmt::Display;
 use core::ops::Sub;
 use std::ops::AddAssign;
 
+pub const SAMPLE_RATE: u32 = 44_100;
+
 pub enum NetworkError {
     NotInitialized,
     AlreadyInitialized,
@@ -196,7 +198,7 @@ pub trait Device {
     fn has_headphones(&mut self) -> bool;
 
     /// Get a writable slice of free audio buffer region.
-    fn get_audio_buffer(&mut self) -> &mut [f32];
+    fn get_audio_buffer(&mut self) -> &mut [i8];
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;

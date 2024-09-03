@@ -13,6 +13,7 @@ const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
+const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 4;
 
 pub struct DeviceImpl {
     /// The time at which the device instance was created.
@@ -21,13 +22,17 @@ pub struct DeviceImpl {
     gamepad: GamepadManager,
     /// The full path to the VFS.
     root: PathBuf,
+    /// The audio buffer
+    audio: AudioWriter,
 }
 
 impl DeviceImpl {
     pub fn new(root: PathBuf) -> Self {
+        let audio = start_audio();
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
+            audio,
             root,
         }
     }
@@ -143,8 +148,8 @@ impl Device for DeviceImpl {
         false
     }
 
-    fn get_audio_buffer(&mut self) -> &mut [f32] {
-        todo!()
+    fn get_audio_buffer(&mut self) -> &mut [i8] {
+        self.audio.get_write_buf()
     }
 
     fn network(&self) -> Self::Network {
@@ -459,5 +464,77 @@ impl RingBuf {
         impl FnMut(&mut Option<TcpStream>) -> Option<&mut TcpStream>,
     > {
         self.data.iter_mut().filter_map(Option::as_mut)
+    }
+}
+
+fn start_audio() -> AudioWriter {
+    let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
+    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    let source = AudioReader { recv };
+    let _ = stream_handle.play_raw(source);
+    AudioWriter {
+        buf: [0; AUDIO_BUF_SIZE],
+        idx: 0,
+        send,
+    }
+}
+
+struct AudioWriter {
+    buf: [i8; AUDIO_BUF_SIZE],
+    send: mpsc::SyncSender<i8>,
+    /// The index of the next sample that we'll need to try sending.
+    idx: usize,
+}
+
+impl AudioWriter {
+    fn get_write_buf(&mut self) -> &mut [i8] {
+        if self.idx == AUDIO_BUF_SIZE {
+            self.idx = 0;
+        }
+        let start = self.idx;
+        let mut idx = self.idx;
+        // write as much as we can from the buffer into the channel
+        while idx < AUDIO_BUF_SIZE {
+            let res = self.send.try_send(self.buf[idx]);
+            if res.is_err() {
+                break;
+            }
+            idx += 1;
+        }
+        self.idx = idx;
+        // fill the now empty part of the buffer with audio data
+        &mut self.buf[start..idx]
+    }
+}
+
+struct AudioReader {
+    recv: mpsc::Receiver<i8>,
+}
+
+impl rodio::Source for AudioReader {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> u16 {
+        2
+    }
+
+    fn sample_rate(&self) -> u32 {
+        SAMPLE_RATE
+    }
+
+    fn total_duration(&self) -> Option<core::time::Duration> {
+        None
+    }
+}
+
+impl Iterator for AudioReader {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let s = self.recv.try_recv().ok()?;
+        let s = s as f32 / (i8::MAX as f32);
+        Some(s)
     }
 }
