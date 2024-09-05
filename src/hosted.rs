@@ -148,7 +148,7 @@ impl Device for DeviceImpl {
         false
     }
 
-    fn get_audio_buffer(&mut self) -> &mut [i8] {
+    fn get_audio_buffer(&mut self) -> &mut [i16] {
         self.audio.get_write_buf()
     }
 
@@ -480,14 +480,14 @@ fn start_audio() -> AudioWriter {
 }
 
 struct AudioWriter {
-    buf: [i8; AUDIO_BUF_SIZE],
-    send: mpsc::SyncSender<i8>,
+    buf: [i16; AUDIO_BUF_SIZE],
+    send: mpsc::SyncSender<i16>,
     /// The index of the next sample that we'll need to try sending.
     idx: usize,
 }
 
 impl AudioWriter {
-    fn get_write_buf(&mut self) -> &mut [i8] {
+    fn get_write_buf(&mut self) -> &mut [i16] {
         if self.idx == AUDIO_BUF_SIZE {
             self.idx = 0;
         }
@@ -508,7 +508,7 @@ impl AudioWriter {
 }
 
 struct AudioReader {
-    recv: mpsc::Receiver<i8>,
+    recv: mpsc::Receiver<i16>,
 }
 
 impl rodio::Source for AudioReader {
@@ -534,7 +534,7 @@ impl Iterator for AudioReader {
 
     fn next(&mut self) -> Option<Self::Item> {
         let s = self.recv.try_recv().ok()?;
-        let s = s as f32 / (i8::MAX as f32);
+        let s = s as f32 / (i16::MAX as f32);
         Some(s)
     }
 }

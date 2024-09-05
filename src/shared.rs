@@ -198,7 +198,7 @@ pub trait Device {
     fn has_headphones(&mut self) -> bool;
 
     /// Get a writable slice of free audio buffer region.
-    fn get_audio_buffer(&mut self) -> &mut [i8];
+    fn get_audio_buffer(&mut self) -> &mut [i16];
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
