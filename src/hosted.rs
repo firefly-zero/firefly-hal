@@ -3,6 +3,7 @@ use crate::shared::*;
 use core::cell::Cell;
 use core::fmt::Display;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
+use rodio::Source;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
@@ -469,13 +470,15 @@ impl RingBuf {
 
 fn start_audio() -> AudioWriter {
     let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
-    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
     let source = AudioReader { recv };
-    let _ = stream_handle.play_raw(source);
+    stream_handle.play_raw(source.convert_samples()).unwrap();
     AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
         idx: 0,
         send,
+        _stream: stream,
+        _stream_handle: stream_handle,
     }
 }
 
@@ -484,6 +487,9 @@ struct AudioWriter {
     send: mpsc::SyncSender<i16>,
     /// The index of the next sample that we'll need to try sending.
     idx: usize,
+
+    _stream: rodio::OutputStream,
+    _stream_handle: rodio::OutputStreamHandle,
 }
 
 impl AudioWriter {
@@ -530,11 +536,10 @@ impl rodio::Source for AudioReader {
 }
 
 impl Iterator for AudioReader {
-    type Item = f32;
+    type Item = i16;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let s = self.recv.try_recv().ok()?;
-        let s = s as f32 / (i16::MAX as f32);
+        let s = self.recv.try_recv().unwrap_or_default();
         Some(s)
     }
 }
