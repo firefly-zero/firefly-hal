@@ -14,7 +14,7 @@ const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
-const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 4;
+const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
 
 pub struct DeviceImpl {
     /// The time at which the device instance was created.
