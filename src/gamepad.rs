@@ -63,6 +63,19 @@ impl GamepadManager {
 
 /// Read state of sticks and convert it into touchpad state.
 fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
+    if gamepad.is_pressed(Button::DPadDown) {
+        return Some(Pad { x: 0, y: -1000 });
+    }
+    if gamepad.is_pressed(Button::DPadUp) {
+        return Some(Pad { x: 0, y: 1000 });
+    }
+    if gamepad.is_pressed(Button::DPadLeft) {
+        return Some(Pad { x: -1000, y: 0 });
+    }
+    if gamepad.is_pressed(Button::DPadRight) {
+        return Some(Pad { x: 1000, y: 0 });
+    }
+
     // Left stick works as pad only if it is pressed down.
     let pad_pressed =
         gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
@@ -81,14 +94,14 @@ fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
     if gamepad.is_pressed(Button::RightThumb) {
         return pad;
     }
-    let Pad { x, y } = pad.clone()?;
+    let Pad { x, y } = pad?;
     let x_zero = (-1..=1).contains(&x);
     let y_zero = (-1..=1).contains(&y);
     // if right stick is resting, pad is not pressed
     if x_zero && y_zero {
         return None;
     }
-    pad
+    Some(Pad { x, y })
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<Pad> {
