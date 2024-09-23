@@ -37,16 +37,7 @@ impl GamepadManager {
             return Some(self.input.clone());
         };
         let gamepad = self.gilrs.connected_gamepad(gamepad_id)?;
-        let pad_pressed =
-            gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
-        let pad = if pad_pressed {
-            make_point(
-                gamepad.axis_data(Axis::LeftStickX),
-                gamepad.axis_data(Axis::LeftStickY),
-            )
-        } else {
-            None
-        };
+        let pad = read_pad(gamepad);
         let buttons_array = [
             gamepad.is_pressed(Button::South), // A
             gamepad.is_pressed(Button::East),  // B
@@ -68,6 +59,36 @@ impl GamepadManager {
 
         Some(InputState { pad, buttons })
     }
+}
+
+/// Read state of sticks and convert it into touchpad state.
+fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
+    // Left stick works as pad only if it is pressed down.
+    let pad_pressed =
+        gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
+    if pad_pressed {
+        return make_point(
+            gamepad.axis_data(Axis::LeftStickX),
+            gamepad.axis_data(Axis::LeftStickY),
+        );
+    };
+
+    let pad = make_point(
+        gamepad.axis_data(Axis::RightStickX),
+        gamepad.axis_data(Axis::RightStickY),
+    );
+    // if right stick is pressed, treat it as pad
+    if gamepad.is_pressed(Button::RightThumb) {
+        return pad;
+    }
+    let Pad { x, y } = pad.clone()?;
+    let x_zero = (-1..=1).contains(&x);
+    let y_zero = (-1..=1).contains(&y);
+    // if right stick is resting, pad is not pressed
+    if x_zero && y_zero {
+        return None;
+    }
+    pad
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<Pad> {
