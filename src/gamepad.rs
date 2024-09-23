@@ -55,7 +55,7 @@ impl GamepadManager {
             gamepad.is_pressed(Button::Start),
         ];
         let mut buttons = 0u8;
-        for b in buttons_array {
+        for b in buttons_array.into_iter().rev() {
             buttons = buttons << 1 | u8::from(b);
         }
 
