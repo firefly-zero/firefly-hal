@@ -19,9 +19,18 @@ const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
 pub struct DeviceConfig {
     /// The full path to the VFS.
     pub root: PathBuf,
+
+    /// The TCP IP address where to listen for serial events.
     pub tcp_ip: IpAddr,
+
+    /// The UDP IP address where to listen for netplay events.
     pub udp_ip: IpAddr,
+
+    /// The UDP IP addresses where to send netplay advertisements.
     pub peers: Vec<IpAddr>,
+
+    /// If provided, the path where to save the audio output (as a WAV file).
+    pub wav: Option<PathBuf>,
 }
 
 impl Default for DeviceConfig {
@@ -32,6 +41,7 @@ impl Default for DeviceConfig {
             tcp_ip: localhost,
             udp_ip: localhost,
             peers: vec![localhost],
+            wav: None,
         }
     }
 }
@@ -48,7 +58,7 @@ pub struct DeviceImpl {
 
 impl DeviceImpl {
     pub fn new(config: DeviceConfig) -> Self {
-        let audio = start_audio();
+        let audio = start_audio(&config);
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
@@ -493,10 +503,23 @@ impl RingBuf {
     }
 }
 
-fn start_audio() -> AudioWriter {
+fn start_audio(config: &DeviceConfig) -> AudioWriter {
+    let wav = if let Some(filename) = &config.wav {
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: SAMPLE_RATE,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let writer = hound::WavWriter::create(filename, spec).unwrap();
+        Some(writer)
+    } else {
+        None
+    };
+
     let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
     let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
-    let source = AudioReader { recv };
+    let source = AudioReader { wav, recv };
     stream_handle.play_raw(source.convert_samples()).unwrap();
     AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
@@ -539,6 +562,7 @@ impl AudioWriter {
 }
 
 struct AudioReader {
+    wav: Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>>,
     recv: mpsc::Receiver<i16>,
 }
 
@@ -565,6 +589,9 @@ impl Iterator for AudioReader {
 
     fn next(&mut self) -> Option<Self::Item> {
         let s = self.recv.try_recv().unwrap_or_default();
+        if let Some(wav) = self.wav.as_mut() {
+            wav.write_sample(s).unwrap()
+        }
         Some(s)
     }
 }
