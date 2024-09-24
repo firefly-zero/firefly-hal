@@ -9,32 +9,51 @@ use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-static IP: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
 const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
 
+#[derive(Clone)]
+pub struct DeviceConfig {
+    /// The full path to the VFS.
+    pub root: PathBuf,
+    pub tcp_ip: IpAddr,
+    pub udp_ip: IpAddr,
+    pub peers: Vec<IpAddr>,
+}
+
+impl Default for DeviceConfig {
+    fn default() -> Self {
+        let localhost = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        Self {
+            root: PathBuf::new(),
+            tcp_ip: localhost,
+            udp_ip: localhost,
+            peers: vec![localhost],
+        }
+    }
+}
+
 pub struct DeviceImpl {
+    config: DeviceConfig,
     /// The time at which the device instance was created.
     start: std::time::Instant,
     /// The shared logic for reading the gamepad input.
     gamepad: GamepadManager,
-    /// The full path to the VFS.
-    root: PathBuf,
     /// The audio buffer
     audio: AudioWriter,
 }
 
 impl DeviceImpl {
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(config: DeviceConfig) -> Self {
         let audio = start_audio();
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
             audio,
-            root,
+            config,
         }
     }
 
@@ -77,14 +96,14 @@ impl Device for DeviceImpl {
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         let file = std::fs::File::open(path).ok()?;
         Some(File { file })
     }
 
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         if let Some(parent) = path.parent() {
             _ = std::fs::create_dir_all(parent);
         }
@@ -94,7 +113,7 @@ impl Device for DeviceImpl {
 
     fn get_file_size(&self, path: &[&str]) -> Option<u32> {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         let Ok(meta) = std::fs::metadata(path) else {
             return None;
         };
@@ -103,13 +122,13 @@ impl Device for DeviceImpl {
 
     fn make_dir(&self, path: &[&str]) -> bool {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         std::fs::create_dir_all(path).is_ok()
     }
 
     fn remove_file(&self, path: &[&str]) -> bool {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         let res = std::fs::remove_file(path);
         match res {
             Ok(_) => true,
@@ -122,7 +141,7 @@ impl Device for DeviceImpl {
         F: FnMut(EntryKind, &[u8]),
     {
         let path: PathBuf = path.iter().collect();
-        let path = self.root.join(path);
+        let path = self.config.root.join(path);
         let Ok(entries) = std::fs::read_dir(path) else {
             return false;
         };
@@ -154,11 +173,11 @@ impl Device for DeviceImpl {
     }
 
     fn network(&self) -> Self::Network {
-        NetworkImpl::new()
+        NetworkImpl::new(self.config.clone())
     }
 
     fn serial(&self) -> Self::Serial {
-        SerialImpl::new()
+        SerialImpl::new(self.config.tcp_ip)
     }
 }
 
@@ -197,6 +216,7 @@ impl embedded_io::Write for File {
 }
 
 pub struct NetworkImpl {
+    config: DeviceConfig,
     worker: Cell<Option<UdpWorker>>,
     r_in: mpsc::Receiver<NetMessage>,
     s_out: mpsc::Sender<NetMessage>,
@@ -205,7 +225,7 @@ pub struct NetworkImpl {
 }
 
 impl NetworkImpl {
-    fn new() -> Self {
+    fn new(config: DeviceConfig) -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
         let (s_stop, r_stop) = mpsc::channel();
@@ -215,6 +235,7 @@ impl NetworkImpl {
             r_stop,
         }));
         Self {
+            config,
             worker,
             r_in,
             s_out,
@@ -236,7 +257,7 @@ impl Network for NetworkImpl {
         let Some(worker) = worker else {
             return Err(NetworkError::AlreadyInitialized);
         };
-        let local_addr = worker.start()?;
+        let local_addr = worker.start(self.config.udp_ip)?;
         self.local_addr = Some(local_addr);
         Ok(())
     }
@@ -248,11 +269,13 @@ impl Network for NetworkImpl {
 
     fn advertise(&mut self) -> NetworkResult<()> {
         let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
-        for port in UDP_PORT_MIN..=UDP_PORT_MAX {
-            let addr = SocketAddr::new(IP, port);
-            let res = self.s_out.send((addr, hello.clone()));
-            if res.is_err() {
-                return Err(NetworkError::NetThreadDeallocated);
+        for ip in &self.config.peers {
+            for port in UDP_PORT_MIN..=UDP_PORT_MAX {
+                let addr = SocketAddr::new(*ip, port);
+                let res = self.s_out.send((addr, hello.clone()));
+                if res.is_err() {
+                    return Err(NetworkError::NetThreadDeallocated);
+                }
             }
         }
         Ok(())
@@ -275,6 +298,7 @@ impl Network for NetworkImpl {
 }
 
 pub struct SerialImpl {
+    ip: IpAddr,
     worker: Cell<Option<TcpWorker>>,
     r_in: mpsc::Receiver<SerialMessage>,
     s_out: mpsc::Sender<SerialMessage>,
@@ -282,7 +306,7 @@ pub struct SerialImpl {
 }
 
 impl SerialImpl {
-    fn new() -> Self {
+    fn new(ip: IpAddr) -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
         let (s_stop, r_stop) = mpsc::channel();
@@ -293,6 +317,7 @@ impl SerialImpl {
         };
         let worker = Cell::new(Some(worker));
         Self {
+            ip,
             worker,
             r_in,
             s_out,
@@ -307,7 +332,7 @@ impl Serial for SerialImpl {
         let Some(worker) = worker else {
             return Err(NetworkError::AlreadyInitialized);
         };
-        worker.start()?;
+        worker.start(self.ip)?;
         Ok(())
     }
 
@@ -341,9 +366,9 @@ struct UdpWorker {
 }
 
 impl UdpWorker {
-    fn start(self) -> Result<SocketAddr, NetworkError> {
+    fn start(self, ip: IpAddr) -> Result<SocketAddr, NetworkError> {
         let addrs: Vec<_> = (UDP_PORT_MIN..=UDP_PORT_MAX)
-            .map(|port| SocketAddr::new(IP, port))
+            .map(|port| SocketAddr::new(ip, port))
             .collect();
         let socket = match UdpSocket::bind(&addrs[..]) {
             Ok(socket) => socket,
@@ -390,9 +415,9 @@ struct TcpWorker {
 }
 
 impl TcpWorker {
-    fn start(self) -> Result<(), NetworkError> {
+    fn start(self, ip: IpAddr) -> Result<(), NetworkError> {
         let addrs: Vec<_> = (TCP_PORT_MIN..=TCP_PORT_MAX)
-            .map(|port| SocketAddr::new(IP, port))
+            .map(|port| SocketAddr::new(ip, port))
             .collect();
         let socket = match TcpListener::bind(&addrs[..]) {
             Ok(socket) => socket,

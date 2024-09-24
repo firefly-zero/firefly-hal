@@ -10,5 +10,8 @@ mod shared;
 #[cfg_attr(target_os = "none", path = "embedded.rs")]
 mod device;
 
+#[cfg(not(target_os = "none"))]
+pub use device::DeviceConfig;
+
 pub use device::{DeviceImpl, NetworkImpl, SerialImpl};
 pub use shared::*;
