@@ -95,8 +95,8 @@ fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
         return pad;
     }
     let Pad { x, y } = pad?;
-    let x_zero = (-1..=1).contains(&x);
-    let y_zero = (-1..=1).contains(&y);
+    let x_zero = (-50..=50).contains(&x);
+    let y_zero = (-50..=50).contains(&y);
     // if right stick is resting, pad is not pressed
     if x_zero && y_zero {
         return None;
