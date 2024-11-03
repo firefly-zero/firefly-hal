@@ -160,6 +160,9 @@ pub trait Device {
     /// If the file already exists, it will be overwritten.
     fn create_file(&self, path: &[&str]) -> Option<Self::Write>;
 
+    /// Write data to the end of the file.
+    fn append_file(&self, path: &[&str]) -> Option<Self::Write>;
+
     /// Get file size in bytes.
     ///
     /// None should be returned if file not found.

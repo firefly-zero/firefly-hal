@@ -121,6 +121,14 @@ impl Device for DeviceImpl {
         Some(File { file })
     }
 
+    fn append_file(&self, path: &[&str]) -> Option<Self::Write> {
+        let path: PathBuf = path.iter().collect();
+        let path = self.config.root.join(path);
+        let mut opts = std::fs::OpenOptions::new();
+        let file = opts.append(true).open(path).ok()?;
+        Some(File { file })
+    }
+
     fn get_file_size(&self, path: &[&str]) -> Option<u32> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
