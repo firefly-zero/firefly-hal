@@ -75,8 +75,8 @@ impl DeviceImpl {
 
 impl Device for DeviceImpl {
     type Network = NetworkImpl;
-    type Serial = SerialImpl;
     type Read = File;
+    type Serial = SerialImpl;
     type Write = File;
 
     fn now(&self) -> Instant {
