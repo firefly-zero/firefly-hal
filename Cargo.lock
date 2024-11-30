@@ -740,7 +740,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "firefly-device"
+name = "firefly-hal"
 version = "0.1.0"
 dependencies = [
  "embedded-io",
