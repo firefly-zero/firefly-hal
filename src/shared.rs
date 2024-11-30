@@ -1,7 +1,7 @@
 use core::fmt;
 use core::fmt::Display;
+use core::ops::AddAssign;
 use core::ops::Sub;
-use std::ops::AddAssign;
 
 pub const SAMPLE_RATE: u32 = 44_100;
 

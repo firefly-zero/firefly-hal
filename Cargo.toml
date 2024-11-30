@@ -28,3 +28,4 @@ web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
 [target.'cfg(target_os = "none")'.dependencies]
 embedded-io = { version = "0.6.1", default-features = false }
 esp-hal = { version = "0.22.0", features = ["esp32s3"] }
+fugit = { version = "0.3.7" }

@@ -1,6 +1,10 @@
 use crate::shared::{Device, Network, Serial};
+use esp_hal::delay::Delay;
+use fugit::MicrosDurationU64;
 
-pub struct DeviceImpl {}
+pub struct DeviceImpl {
+    delay: Delay,
+}
 
 impl Device for DeviceImpl {
     type Read = File;
@@ -13,7 +17,9 @@ impl Device for DeviceImpl {
     }
 
     fn delay(&self, d: crate::Duration) {
-        todo!()
+        let d_micros = d.ns() / 1_000;
+        let d = MicrosDurationU64::from_ticks(d_micros as u64);
+        self.delay.delay(d);
     }
 
     fn read_input(&mut self) -> Option<crate::InputState> {
