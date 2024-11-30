@@ -1,4 +1,4 @@
-use crate::shared::{Device, Network, Serial};
+use crate::shared::*;
 use core::cell::Cell;
 use esp_hal::{clock::CpuClock, delay::Delay, uart::Uart, Blocking};
 use fugit::MicrosDurationU64;
@@ -33,18 +33,18 @@ impl Device for DeviceImpl {
     type Network = NetworkImpl;
     type Serial = SerialImpl;
 
-    fn now(&self) -> crate::Instant {
+    fn now(&self) -> Instant {
         todo!()
     }
 
-    fn delay(&self, d: crate::Duration) {
+    fn delay(&self, d: Duration) {
         let d_micros = d.ns() / 1_000;
         let d = MicrosDurationU64::from_ticks(d_micros as u64);
         self.delay.delay(d);
     }
 
-    fn read_input(&mut self) -> Option<crate::InputState> {
-        todo!()
+    fn read_input(&mut self) -> Option<InputState> {
+        None
     }
 
     fn log_debug<D: core::fmt::Display>(&self, src: &str, msg: D) {
@@ -58,50 +58,50 @@ impl Device for DeviceImpl {
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
-        todo!()
+        None
     }
 
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
-        todo!()
+        None
     }
 
     fn append_file(&self, path: &[&str]) -> Option<Self::Write> {
-        todo!()
+        None
     }
 
     fn get_file_size(&self, path: &[&str]) -> Option<u32> {
-        todo!()
+        None
     }
 
     fn make_dir(&self, path: &[&str]) -> bool {
-        todo!()
+        false
     }
 
     fn remove_file(&self, path: &[&str]) -> bool {
-        todo!()
+        false
     }
 
     fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
     where
         F: FnMut(crate::EntryKind, &[u8]),
     {
-        todo!()
+        false
     }
 
     fn network(&self) -> Self::Network {
-        todo!()
+        NetworkImpl {}
     }
 
     fn serial(&self) -> Self::Serial {
-        todo!()
+        SerialImpl {}
     }
 
     fn has_headphones(&mut self) -> bool {
-        todo!()
+        false
     }
 
     fn get_audio_buffer(&mut self) -> &mut [i16] {
-        todo!()
+        &mut []
     }
 }
 
@@ -113,11 +113,11 @@ impl embedded_io::ErrorType for FileW {
 
 impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        todo!()
+        Err(embedded_io::ErrorKind::Other)
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        Err(embedded_io::ErrorKind::Other)
     }
 }
 
@@ -129,13 +129,13 @@ impl embedded_io::ErrorType for FileR {
 
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        todo!()
+        Err(embedded_io::ErrorKind::Other)
     }
 }
 
 impl wasmi::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        todo!()
+        Err(wasmi::errors::ReadError::UnknownError)
     }
 }
 
@@ -144,47 +144,47 @@ pub struct NetworkImpl {}
 impl Network for NetworkImpl {
     type Addr = ();
 
-    fn start(&mut self) -> crate::NetworkResult<()> {
-        todo!()
+    fn start(&mut self) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 
-    fn stop(&mut self) -> crate::NetworkResult<()> {
-        todo!()
+    fn stop(&mut self) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 
     fn local_addr(&self) -> Self::Addr {
-        todo!()
+        ()
     }
 
-    fn advertise(&mut self) -> crate::NetworkResult<()> {
-        todo!()
+    fn advertise(&mut self) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 
-    fn recv(&mut self) -> crate::NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        todo!()
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
+        Err(NetworkError::Other(0))
     }
 
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> crate::NetworkResult<()> {
-        todo!()
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 }
 
 pub struct SerialImpl {}
 
 impl Serial for SerialImpl {
-    fn start(&mut self) -> crate::NetworkResult<()> {
-        todo!()
+    fn start(&mut self) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 
-    fn stop(&mut self) -> crate::NetworkResult<()> {
-        todo!()
+    fn stop(&mut self) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 
-    fn recv(&mut self) -> crate::NetworkResult<Option<heapless::Vec<u8, 64>>> {
-        todo!()
+    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>> {
+        Err(NetworkError::Other(0))
     }
 
-    fn send(&mut self, data: &[u8]) -> crate::NetworkResult<()> {
-        todo!()
+    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        Err(NetworkError::Other(0))
     }
 }
