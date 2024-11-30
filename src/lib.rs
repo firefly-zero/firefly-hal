@@ -1,4 +1,7 @@
 #![cfg_attr(target_os = "none", no_std)]
+#![allow(clippy::new_without_default)]
+
+extern crate alloc;
 
 #[cfg(not(target_os = "none"))]
 mod gamepad;

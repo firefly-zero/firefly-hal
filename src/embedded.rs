@@ -1,9 +1,30 @@
 use crate::shared::{Device, Network, Serial};
-use esp_hal::delay::Delay;
+use core::cell::Cell;
+use esp_hal::{clock::CpuClock, delay::Delay, uart::Uart, Blocking};
 use fugit::MicrosDurationU64;
 
 pub struct DeviceImpl {
     delay: Delay,
+    uart: Cell<Option<Uart<'static, Blocking>>>,
+}
+
+impl DeviceImpl {
+    pub fn new() -> Self {
+        let mut config = esp_hal::Config::default();
+        config.cpu_clock = CpuClock::max();
+        let peripherals = esp_hal::init(config);
+        let uart = Uart::new(peripherals.UART1, peripherals.GPIO1, peripherals.GPIO2).unwrap();
+        Self {
+            delay: Delay::new(),
+            uart: Cell::new(Some(uart)),
+        }
+    }
+
+    fn log(&self, msg: &str) {
+        let mut uart = self.uart.replace(None);
+        _ = uart.as_mut().unwrap().write_bytes(msg.as_bytes());
+        self.uart.replace(uart);
+    }
 }
 
 impl Device for DeviceImpl {
@@ -27,11 +48,13 @@ impl Device for DeviceImpl {
     }
 
     fn log_debug<D: core::fmt::Display>(&self, src: &str, msg: D) {
-        todo!()
+        let msg = alloc::format!("DEBUG({src}): {msg}");
+        self.log(&msg);
     }
 
     fn log_error<D: core::fmt::Display>(&self, src: &str, msg: D) {
-        todo!()
+        let msg = alloc::format!("ERROR({src}): {msg}");
+        self.log(&msg);
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
