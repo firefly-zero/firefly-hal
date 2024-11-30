@@ -28,8 +28,8 @@ impl DeviceImpl {
 }
 
 impl Device for DeviceImpl {
-    type Read = File;
-    type Write = File;
+    type Read = FileR;
+    type Write = FileW;
     type Network = NetworkImpl;
     type Serial = SerialImpl;
 
@@ -105,13 +105,13 @@ impl Device for DeviceImpl {
     }
 }
 
-pub struct File {}
+pub struct FileW {}
 
-impl embedded_io::ErrorType for File {
+impl embedded_io::ErrorType for FileW {
     type Error = embedded_io::ErrorKind;
 }
 
-impl embedded_io::Write for File {
+impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         todo!()
     }
@@ -121,13 +121,19 @@ impl embedded_io::Write for File {
     }
 }
 
-impl embedded_io::Read for File {
+pub struct FileR {}
+
+impl embedded_io::ErrorType for FileR {
+    type Error = embedded_io::ErrorKind;
+}
+
+impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         todo!()
     }
 }
 
-impl wasmi::Read for File {
+impl wasmi::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
         todo!()
     }
