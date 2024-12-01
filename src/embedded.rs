@@ -1,23 +1,24 @@
 use crate::shared::*;
 use core::cell::Cell;
+use embedded_storage::{ReadStorage, Storage};
 use esp_hal::{clock::CpuClock, delay::Delay, uart::Uart, Blocking};
+use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
 
 pub struct DeviceImpl {
     delay: Delay,
     uart: Cell<Option<Uart<'static, Blocking>>>,
+    flash: FlashStorage,
 }
 
 impl DeviceImpl {
-    pub fn new() -> Self {
-        let mut config = esp_hal::Config::default();
-        config.cpu_clock = CpuClock::max();
-        let peripherals = esp_hal::init(config);
-        let uart = Uart::new(peripherals.UART1, peripherals.GPIO1, peripherals.GPIO2).unwrap();
-        Self {
+    pub fn new(uart: Uart<'static, Blocking>) -> Result<Self, esp_hal::uart::Error> {
+        let device = Self {
             delay: Delay::new(),
             uart: Cell::new(Some(uart)),
-        }
+            flash: FlashStorage::new(),
+        };
+        Ok(device)
     }
 
     fn log(&self, msg: &str) {
@@ -58,6 +59,7 @@ impl Device for DeviceImpl {
     }
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
+        // self.flash.read(offset, bytes);
         None
     }
 
