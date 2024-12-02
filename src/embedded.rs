@@ -1,30 +1,35 @@
 use crate::shared::*;
 use core::cell::Cell;
+use embedded_io::Write;
 use embedded_storage::{ReadStorage, Storage};
 use esp_hal::{clock::CpuClock, delay::Delay, uart::Uart, Blocking};
 use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
 
+static BIN: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-debug/_bin");
+static META: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-debug/_meta");
+
 pub struct DeviceImpl {
     delay: Delay,
-    uart: Cell<Option<Uart<'static, Blocking>>>,
+    // uart: Cell<Option<Uart<'static, Blocking>>>,
     flash: FlashStorage,
 }
 
 impl DeviceImpl {
-    pub fn new(uart: Uart<'static, Blocking>) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new() -> Result<Self, esp_hal::uart::Error> {
         let device = Self {
             delay: Delay::new(),
-            uart: Cell::new(Some(uart)),
+            // uart: Cell::new(Some(uart)),
             flash: FlashStorage::new(),
         };
         Ok(device)
     }
 
     fn log(&self, msg: &str) {
-        let mut uart = self.uart.replace(None);
-        _ = uart.as_mut().unwrap().write_bytes(msg.as_bytes());
-        self.uart.replace(uart);
+        esp_println::println!("{msg}");
+        // let mut uart = self.uart.replace(None);
+        // _ = uart.as_mut().unwrap().write_bytes(msg.as_bytes());
+        // self.uart.replace(uart);
     }
 }
 
@@ -60,7 +65,11 @@ impl Device for DeviceImpl {
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
         // self.flash.read(offset, bytes);
-        None
+        match path {
+            ["roms", "demo", "go-debug", "_bin"] => Some(FileR { bin: BIN }),
+            ["roms", "demo", "go-debug", "_meta"] => Some(FileR { bin: META }),
+            _ => None,
+        }
     }
 
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
@@ -123,7 +132,17 @@ impl embedded_io::Write for FileW {
     }
 }
 
-pub struct FileR {}
+pub struct FileR {
+    bin: &'static [u8],
+}
+
+impl FileR {
+    fn read_safe(&mut self, mut buf: &mut [u8]) -> usize {
+        let size = buf.write(self.bin).unwrap();
+        self.bin = &self.bin[size..];
+        size
+    }
+}
 
 impl embedded_io::ErrorType for FileR {
     type Error = embedded_io::ErrorKind;
@@ -131,13 +150,13 @@ impl embedded_io::ErrorType for FileR {
 
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        Err(embedded_io::ErrorKind::Other)
+        Ok(self.read_safe(buf))
     }
 }
 
 impl wasmi::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        Err(wasmi::errors::ReadError::UnknownError)
+        Ok(self.read_safe(buf))
     }
 }
 
