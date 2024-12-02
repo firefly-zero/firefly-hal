@@ -2,7 +2,7 @@ use crate::shared::*;
 use core::cell::Cell;
 use embedded_io::Write;
 use embedded_storage::{ReadStorage, Storage};
-use esp_hal::{clock::CpuClock, delay::Delay, uart::Uart, Blocking};
+use esp_hal::{clock::CpuClock, delay::Delay, timer::systimer::SystemTimer, uart::Uart, Blocking};
 use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
 
@@ -40,7 +40,10 @@ impl Device for DeviceImpl {
     type Serial = SerialImpl;
 
     fn now(&self) -> Instant {
-        todo!()
+        debug_assert_eq!(SystemTimer::ticks_per_second(), 100_000);
+        Instant {
+            ns: (SystemTimer::now() * 1000) as u32,
+        }
     }
 
     fn delay(&self, d: Duration) {
@@ -166,27 +169,25 @@ impl Network for NetworkImpl {
     type Addr = ();
 
     fn start(&mut self) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 
     fn stop(&mut self) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 
-    fn local_addr(&self) -> Self::Addr {
-        ()
-    }
+    fn local_addr(&self) -> Self::Addr {}
 
     fn advertise(&mut self) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        Err(NetworkError::Other(0))
+        Ok(None)
     }
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 }
 
@@ -194,18 +195,18 @@ pub struct SerialImpl {}
 
 impl Serial for SerialImpl {
     fn start(&mut self) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 
     fn stop(&mut self) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 
     fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>> {
-        Err(NetworkError::Other(0))
+        Ok(None)
     }
 
     fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
-        Err(NetworkError::Other(0))
+        Ok(())
     }
 }
