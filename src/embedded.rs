@@ -2,7 +2,7 @@ use crate::shared::*;
 use core::cell::Cell;
 use embedded_io::Write;
 use embedded_storage::{ReadStorage, Storage};
-use esp_hal::{clock::CpuClock, delay::Delay, timer::systimer::SystemTimer, uart::Uart, Blocking};
+use esp_hal::{delay::Delay, timer::systimer::SystemTimer};
 use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
 
@@ -40,9 +40,9 @@ impl Device for DeviceImpl {
     type Serial = SerialImpl;
 
     fn now(&self) -> Instant {
-        debug_assert_eq!(SystemTimer::ticks_per_second(), 100_000);
+        debug_assert_eq!(SystemTimer::ticks_per_second(), 16_000_000);
         Instant {
-            ns: (SystemTimer::now() * 1000) as u32,
+            ns: (SystemTimer::now() * 125 / 2) as u32,
         }
     }
 
