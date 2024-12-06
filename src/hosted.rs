@@ -138,12 +138,6 @@ impl Device for DeviceImpl {
         Some(meta.len() as u32)
     }
 
-    fn make_dir(&self, path: &[&str]) -> bool {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        std::fs::create_dir_all(path).is_ok()
-    }
-
     fn remove_file(&self, path: &[&str]) -> bool {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);

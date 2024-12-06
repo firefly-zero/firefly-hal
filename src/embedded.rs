@@ -122,27 +122,6 @@ impl<'a> Device<'a> for DeviceImpl {
         self.volume_manager.file_length(file).ok()
     }
 
-    fn make_dir(&mut self, path: &[&str]) -> bool {
-        let manager = &mut self.volume_manager;
-        let Ok(volume0) = manager.open_volume(VolumeIdx(0)) else {
-            return false;
-        };
-        let volume0 = volume0.to_raw_volume();
-        let Ok(mut dir) = manager.open_root_dir(volume0) else {
-            return false;
-        };
-        for part in path {
-            let Ok(_) = manager.make_dir_in_dir(dir, *part) else {
-                return false;
-            };
-            let Ok(new_dir) = manager.open_dir(dir, *part) else {
-                return false;
-            };
-            dir = new_dir;
-        }
-        true
-    }
-
     fn remove_file(&mut self, path: &[&str]) -> bool {
         false
     }

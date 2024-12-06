@@ -168,11 +168,6 @@ pub trait Device<'a> {
     /// None should be returned if file not found.
     fn get_file_size(&mut self, path: &[&str]) -> Option<u32>;
 
-    /// Create the directory and all its parents if doesn't exist.
-    ///
-    /// Returns false only if there is an error.
-    fn make_dir(&mut self, path: &[&str]) -> bool;
-
     /// Delete the given file if exists.
     ///
     /// Directories cannot be removed.
