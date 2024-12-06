@@ -18,7 +18,7 @@ type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDela
 pub struct DeviceImpl {
     delay: Delay,
     // uart: Cell<Option<Uart<'static, Blocking>>>,
-    volume_manager: Cell<Option<VolumeManager<SD, FakeTimesource>>>,
+    volume_manager: VolumeManager<SD, FakeTimesource>,
 }
 
 impl DeviceImpl {
@@ -27,7 +27,7 @@ impl DeviceImpl {
         let device = Self {
             delay: Delay::new(),
             // uart: Cell::new(Some(uart)),
-            volume_manager: Cell::new(Some(volume_manager)),
+            volume_manager,
         };
         Ok(device)
     }
@@ -73,7 +73,7 @@ impl Device for DeviceImpl {
         self.log(&msg);
     }
 
-    fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
         // self.flash.read(offset, bytes);
         // match path {
         //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
@@ -81,13 +81,12 @@ impl Device for DeviceImpl {
         //     _ => None,
         // }
 
-        let mut manager = self.volume_manager.take().unwrap();
+        let manager = &mut self.volume_manager;
         let volume0 = manager.open_volume(VolumeIdx(0)).unwrap();
         let volume0 = volume0.to_raw_volume();
         let root_dir = manager.open_root_dir(volume0).unwrap();
         let name = path.join("/");
         let file = manager.open_file_in_dir(root_dir, &*name, Mode::ReadOnly);
-        self.volume_manager.set(Some(manager));
         let Ok(file) = file else {
             return None;
         };

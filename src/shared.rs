@@ -153,7 +153,7 @@ pub trait Device {
     /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
     ///
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
-    fn open_file(&self, path: &[&str]) -> Option<Self::Read>;
+    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read>;
 
     /// Create a new file and open it for write.
     ///

@@ -104,7 +104,7 @@ impl Device for DeviceImpl {
         eprintln!("ERROR({src}): {msg}");
     }
 
-    fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let file = std::fs::File::open(path).ok()?;
