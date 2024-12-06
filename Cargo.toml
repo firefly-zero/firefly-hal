@@ -5,6 +5,8 @@ rust-version = "1.82.0"
 edition = "2021"
 
 [dependencies]
+embedded-hal-bus = { version = "0.2.0", default-features = false }
+embedded-sdmmc = { version = "0.8.1", default-features = false }
 heapless = "0.8.0"
 wasmi = { version = "0.40.0", default-features = false }
 

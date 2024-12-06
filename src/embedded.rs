@@ -1,26 +1,33 @@
 use crate::shared::*;
 use core::cell::Cell;
+use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_io::Write;
+use embedded_sdmmc::{Mode, SdCard, VolumeIdx, VolumeManager};
 use embedded_storage::{ReadStorage, Storage};
-use esp_hal::{delay::Delay, timer::systimer::SystemTimer};
+use esp_hal::{
+    delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
+};
 use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
 
-static BIN: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-debug/_bin");
-static META: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-debug/_meta");
+static BIN: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-triangle/_bin");
+static META: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-triangle/_meta");
+
+type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 
 pub struct DeviceImpl {
     delay: Delay,
     // uart: Cell<Option<Uart<'static, Blocking>>>,
-    flash: FlashStorage,
+    volume_manager: Cell<Option<VolumeManager<SD, FakeTimesource>>>,
 }
 
 impl DeviceImpl {
-    pub fn new() -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
+        let volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, FakeTimesource {});
         let device = Self {
             delay: Delay::new(),
             // uart: Cell::new(Some(uart)),
-            flash: FlashStorage::new(),
+            volume_manager: Cell::new(Some(volume_manager)),
         };
         Ok(device)
     }
@@ -68,11 +75,23 @@ impl Device for DeviceImpl {
 
     fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
         // self.flash.read(offset, bytes);
-        match path {
-            ["roms", "demo", "go-debug", "_bin"] => Some(FileR { bin: BIN }),
-            ["roms", "demo", "go-debug", "_meta"] => Some(FileR { bin: META }),
-            _ => None,
-        }
+        // match path {
+        //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
+        //     ["roms", "demo", "go-triangle", "_meta"] => Some(FileR { bin: META }),
+        //     _ => None,
+        // }
+
+        let mut manager = self.volume_manager.take().unwrap();
+        let volume0 = manager.open_volume(VolumeIdx(0)).unwrap();
+        let volume0 = volume0.to_raw_volume();
+        let root_dir = manager.open_root_dir(volume0).unwrap();
+        let name = path.join("/");
+        let file = manager.open_file_in_dir(root_dir, &*name, Mode::ReadOnly);
+        self.volume_manager.set(Some(manager));
+        let Ok(file) = file else {
+            return None;
+        };
+        todo!()
     }
 
     fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
@@ -208,5 +227,20 @@ impl Serial for SerialImpl {
 
     fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
         Ok(())
+    }
+}
+
+struct FakeTimesource {}
+
+impl embedded_sdmmc::TimeSource for FakeTimesource {
+    fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
+        embedded_sdmmc::Timestamp {
+            year_since_1970: 0,
+            zero_indexed_month: 0,
+            zero_indexed_day: 0,
+            hours: 0,
+            minutes: 0,
+            seconds: 0,
+        }
     }
 }
