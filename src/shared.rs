@@ -91,7 +91,7 @@ impl AddAssign for Duration {
     }
 }
 
-pub trait Device {
+pub trait Device<'a> {
     type Read: wasmi::Read + embedded_io::Read;
     type Write: embedded_io::Write;
     type Network: Network;
@@ -153,32 +153,32 @@ pub trait Device {
     /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
     ///
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read>;
+    fn open_file(&'a mut self, path: &[&str]) -> Option<Self::Read>;
 
     /// Create a new file and open it for write.
     ///
     /// If the file already exists, it will be overwritten.
-    fn create_file(&self, path: &[&str]) -> Option<Self::Write>;
+    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write>;
 
     /// Write data to the end of the file.
-    fn append_file(&self, path: &[&str]) -> Option<Self::Write>;
+    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write>;
 
     /// Get file size in bytes.
     ///
     /// None should be returned if file not found.
-    fn get_file_size(&self, path: &[&str]) -> Option<u32>;
+    fn get_file_size(&mut self, path: &[&str]) -> Option<u32>;
 
     /// Create the directory and all its parents if doesn't exist.
     ///
     /// Returns false only if there is an error.
-    fn make_dir(&self, path: &[&str]) -> bool;
+    fn make_dir(&mut self, path: &[&str]) -> bool;
 
     /// Delete the given file if exists.
     ///
     /// Directories cannot be removed.
     ///
     /// Returns false only if there is an error.
-    fn remove_file(&self, path: &[&str]) -> bool;
+    fn remove_file(&mut self, path: &[&str]) -> bool;
 
     /// Call the callback for each entry in the given directory.
     ///
@@ -186,7 +186,7 @@ pub trait Device {
     /// but embedded-sdmmc-rs [doesn't support it][1].
     ///
     /// [1]: https://github.com/rust-embedded-community/embedded-sdmmc-rs/issues/125
-    fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> bool
     where
         F: FnMut(EntryKind, &[u8]);
 

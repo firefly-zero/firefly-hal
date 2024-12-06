@@ -38,10 +38,21 @@ impl DeviceImpl {
         // _ = uart.as_mut().unwrap().write_bytes(msg.as_bytes());
         // self.uart.replace(uart);
     }
+
+    fn get_dir(&mut self, path: &[&str]) -> Option<embedded_sdmmc::RawDirectory> {
+        let manager = &mut self.volume_manager;
+        let volume0 = manager.open_volume(VolumeIdx(0)).ok()?;
+        let volume0 = volume0.to_raw_volume();
+        let mut dir = manager.open_root_dir(volume0).ok()?;
+        for part in path {
+            dir = manager.open_dir(dir, *part).ok()?;
+        }
+        Some(dir)
+    }
 }
 
-impl Device for DeviceImpl {
-    type Read = FileR;
+impl<'a> Device<'a> for DeviceImpl {
+    type Read = FileR<'a>;
     type Write = FileW;
     type Network = NetworkImpl;
     type Serial = SerialImpl;
@@ -73,7 +84,7 @@ impl Device for DeviceImpl {
         self.log(&msg);
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&'a mut self, path: &[&str]) -> Option<Self::Read> {
         // self.flash.read(offset, bytes);
         // match path {
         //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
@@ -81,39 +92,62 @@ impl Device for DeviceImpl {
         //     _ => None,
         // }
 
+        let (file_name, dir_path) = path.split_last()?;
+        let dir = self.get_dir(dir_path)?;
+        let file = self
+            .volume_manager
+            .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
+            .ok()?;
+        Some(FileR {
+            volume_manager: &mut self.volume_manager,
+            file,
+        })
+    }
+
+    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write> {
+        None
+    }
+
+    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write> {
+        None
+    }
+
+    fn get_file_size(&mut self, path: &[&str]) -> Option<u32> {
+        let (file_name, dir_path) = path.split_last()?;
+        let dir = self.get_dir(dir_path)?;
+        let file = self
+            .volume_manager
+            .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
+            .ok()?;
+        self.volume_manager.file_length(file).ok()
+    }
+
+    fn make_dir(&mut self, path: &[&str]) -> bool {
         let manager = &mut self.volume_manager;
-        let volume0 = manager.open_volume(VolumeIdx(0)).unwrap();
-        let volume0 = volume0.to_raw_volume();
-        let root_dir = manager.open_root_dir(volume0).unwrap();
-        let name = path.join("/");
-        let file = manager.open_file_in_dir(root_dir, &*name, Mode::ReadOnly);
-        let Ok(file) = file else {
-            return None;
+        let Ok(volume0) = manager.open_volume(VolumeIdx(0)) else {
+            return false;
         };
-        todo!()
+        let volume0 = volume0.to_raw_volume();
+        let Ok(mut dir) = manager.open_root_dir(volume0) else {
+            return false;
+        };
+        for part in path {
+            let Ok(_) = manager.make_dir_in_dir(dir, *part) else {
+                return false;
+            };
+            let Ok(new_dir) = manager.open_dir(dir, *part) else {
+                return false;
+            };
+            dir = new_dir;
+        }
+        true
     }
 
-    fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
-        None
-    }
-
-    fn append_file(&self, path: &[&str]) -> Option<Self::Write> {
-        None
-    }
-
-    fn get_file_size(&self, path: &[&str]) -> Option<u32> {
-        None
-    }
-
-    fn make_dir(&self, path: &[&str]) -> bool {
+    fn remove_file(&mut self, path: &[&str]) -> bool {
         false
     }
 
-    fn remove_file(&self, path: &[&str]) -> bool {
-        false
-    }
-
-    fn iter_dir<F>(&self, path: &[&str], f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> bool
     where
         F: FnMut(crate::EntryKind, &[u8]),
     {
@@ -153,31 +187,30 @@ impl embedded_io::Write for FileW {
     }
 }
 
-pub struct FileR {
-    bin: &'static [u8],
+pub struct FileR<'a> {
+    volume_manager: &'a mut VolumeManager<SD, FakeTimesource>,
+    file: embedded_sdmmc::RawFile,
 }
 
-impl FileR {
-    fn read_safe(&mut self, mut buf: &mut [u8]) -> usize {
-        let size = buf.write(self.bin).unwrap();
-        self.bin = &self.bin[size..];
-        size
-    }
-}
-
-impl embedded_io::ErrorType for FileR {
+impl<'a> embedded_io::ErrorType for FileR<'a> {
     type Error = embedded_io::ErrorKind;
 }
 
-impl embedded_io::Read for FileR {
+impl<'a> embedded_io::Read for FileR<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        Ok(self.read_safe(buf))
+        match self.volume_manager.read(self.file, buf) {
+            Ok(size) => Ok(size),
+            Err(_) => Err(embedded_io::ErrorKind::Other),
+        }
     }
 }
 
-impl wasmi::Read for FileR {
+impl<'a> wasmi::Read for FileR<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        Ok(self.read_safe(buf))
+        match self.volume_manager.read(self.file, buf) {
+            Ok(size) => Ok(size),
+            Err(_) => Err(wasmi::errors::ReadError::UnknownError),
+        }
     }
 }
 
