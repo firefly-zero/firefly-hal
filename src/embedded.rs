@@ -1,17 +1,11 @@
 use crate::{errors::FSError, shared::*};
-use core::cell::{Cell, OnceCell};
+use core::cell::OnceCell;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_io::Write;
 use embedded_sdmmc::{Mode, SdCard, VolumeIdx, VolumeManager};
-use embedded_storage::{ReadStorage, Storage};
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
-use esp_storage::FlashStorage;
 use fugit::MicrosDurationU64;
-
-static BIN: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-triangle/_bin");
-static META: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/go-triangle/_meta");
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 
@@ -47,9 +41,16 @@ impl DeviceImpl {
         let volume0 = manager.open_volume(VolumeIdx(0))?;
         let volume0 = volume0.to_raw_volume();
         let mut dir = manager.open_root_dir(volume0)?;
-        if let Ok(new_dir) = manager.open_dir(dir, ".firefly") {
-            dir = new_dir;
-        }
+        // if let Ok(new_dir) = manager.open_dir(dir, ".firefly") {
+        //     dir = new_dir;
+        // }
+        // let res = manager.iterate_dir(dir, |e| {
+        //     esp_println::println!("<{}>", e.name);
+        // });
+        // if let Err(err) = res {
+        //     let err = FSError::from(err);
+        //     panic!("{err}")
+        // }
         for part in path {
             dir = manager.open_dir(dir, *part)?;
         }

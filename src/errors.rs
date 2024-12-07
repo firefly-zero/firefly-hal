@@ -59,6 +59,8 @@ pub enum FSError {
     DiskFull,
     /// A directory with that name already exists
     DirAlreadyExists,
+    // The filesystem tried to gain a lock whilst already locked.
+    Deadlock,
 
     /// The operation lacked the necessary privileges to complete.
     PermissionDenied,
@@ -138,6 +140,7 @@ impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
             InvalidOffset => Self::InvalidOffset,
             DiskFull => Self::DiskFull,
             DirAlreadyExists => Self::DirAlreadyExists,
+            LockError => Self::Deadlock,
         }
     }
 }
@@ -252,6 +255,7 @@ impl fmt::Display for FSError {
             TimedOut => write!(f, "timed out"),
             Interrupted => write!(f, "interrupted"),
             WriteZero => write!(f, "write zero"),
+            Deadlock => write!(f, "deadlock"),
             Other => write!(f, "other"),
         }
     }
