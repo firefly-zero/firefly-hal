@@ -1,5 +1,5 @@
 use crate::gamepad::GamepadManager;
-use crate::shared::*;
+use crate::*;
 use core::cell::Cell;
 use core::fmt::Display;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -104,63 +104,60 @@ impl Device for DeviceImpl {
         eprintln!("ERROR({src}): {msg}");
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
-        let file = std::fs::File::open(path).ok()?;
-        Some(File { file })
+        let file = std::fs::File::open(path)?;
+        Ok(File { file })
     }
 
-    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write> {
+    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         if let Some(parent) = path.parent() {
             _ = std::fs::create_dir_all(parent);
         }
-        let file = std::fs::File::create(path).ok()?;
-        Some(File { file })
+        let file = std::fs::File::create(path)?;
+        Ok(File { file })
     }
 
-    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write> {
+    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let mut opts = std::fs::OpenOptions::new();
-        let file = opts.append(true).open(path).ok()?;
-        Some(File { file })
+        let file = opts.append(true).open(path)?;
+        Ok(File { file })
     }
 
-    fn get_file_size(&mut self, path: &[&str]) -> Option<u32> {
+    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
-        let Ok(meta) = std::fs::metadata(path) else {
-            return None;
-        };
-        Some(meta.len() as u32)
+        let meta = std::fs::metadata(path)?;
+        Ok(meta.len() as u32)
     }
 
-    fn remove_file(&mut self, path: &[&str]) -> bool {
+    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let res = std::fs::remove_file(path);
         match res {
-            Ok(_) => true,
-            Err(err) => matches!(err.kind(), std::io::ErrorKind::NotFound),
+            Ok(_) => Ok(()),
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(err.into()),
+            },
         }
     }
 
-    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> Result<(), FSError>
     where
         F: FnMut(EntryKind, &[u8]),
     {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
-        let Ok(entries) = std::fs::read_dir(path) else {
-            return false;
-        };
+        let entries = std::fs::read_dir(path)?;
         for entry in entries {
-            let Ok(entry) = entry else {
-                return false;
-            };
+            let entry = entry?;
             let path = entry.path();
             let kind = if path.is_dir() {
                 EntryKind::Dir
@@ -173,7 +170,7 @@ impl Device for DeviceImpl {
             let fname = fname.as_encoded_bytes();
             f(kind, fname);
         }
-        true
+        Ok(())
     }
 
     fn has_headphones(&mut self) -> bool {

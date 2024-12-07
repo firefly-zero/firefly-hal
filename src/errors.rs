@@ -1,5 +1,4 @@
-use core::fmt::Display;
-use core::fmt::{self, Debug};
+use core::fmt;
 
 pub enum FSError {
     /// The underlying block device threw an error.
@@ -106,7 +105,7 @@ pub enum FSError {
 }
 
 #[cfg(target_os = "none")]
-impl<T: Debug> From<embedded_sdmmc::Error<T>> for FSError {
+impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
     fn from(value: embedded_sdmmc::Error<T>) -> Self {
         use embedded_sdmmc::Error::*;
         match value {
@@ -143,6 +142,43 @@ impl<T: Debug> From<embedded_sdmmc::Error<T>> for FSError {
     }
 }
 
+#[cfg(not(target_os = "none"))]
+impl From<std::io::Error> for FSError {
+    fn from(value: std::io::Error) -> Self {
+        value.kind().into()
+    }
+}
+
+#[cfg(not(target_os = "none"))]
+impl From<std::io::ErrorKind> for FSError {
+    fn from(value: std::io::ErrorKind) -> Self {
+        use std::io::ErrorKind::*;
+        match value {
+            NotFound => Self::NotFound,
+            PermissionDenied => Self::PermissionDenied,
+            ConnectionRefused => Self::ConnectionRefused,
+            ConnectionReset => Self::ConnectionReset,
+            ConnectionAborted => Self::ConnectionAborted,
+            NotConnected => Self::NotConnected,
+            AddrInUse => Self::AddrInUse,
+            AddrNotAvailable => Self::AddrNotAvailable,
+            BrokenPipe => Self::BrokenPipe,
+            AlreadyExists => Self::FileAlreadyExists,
+            WouldBlock => Self::Other,
+            InvalidInput => Self::InvalidInput,
+            InvalidData => Self::InvalidData,
+            TimedOut => Self::TimedOut,
+            WriteZero => Self::WriteZero,
+            Interrupted => Self::Interrupted,
+            Unsupported => Self::Unsupported,
+            UnexpectedEof => Self::EndOfFile,
+            OutOfMemory => Self::DiskFull,
+            Other => Self::Other,
+            _ => Self::Other,
+        }
+    }
+}
+
 impl From<embedded_io::ErrorKind> for FSError {
     fn from(value: embedded_io::ErrorKind) -> Self {
         use embedded_io::ErrorKind::*;
@@ -165,12 +201,12 @@ impl From<embedded_io::ErrorKind> for FSError {
             Unsupported => Self::Unsupported,
             OutOfMemory => Self::DiskFull,
             WriteZero => Self::WriteZero,
-            _ => todo!(),
+            _ => Self::Other,
         }
     }
 }
 
-impl Display for FSError {
+impl fmt::Display for FSError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use FSError::*;
         match self {
@@ -234,7 +270,7 @@ pub enum NetworkError {
     Other(u32),
 }
 
-impl Display for NetworkError {
+impl fmt::Display for NetworkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use NetworkError::*;
         match self {
