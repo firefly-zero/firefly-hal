@@ -1,4 +1,4 @@
-use crate::shared::*;
+use crate::{errors::FSError, shared::*};
 use core::cell::{Cell, OnceCell};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_io::Write;
@@ -42,18 +42,18 @@ impl DeviceImpl {
         // self.uart.replace(uart);
     }
 
-    fn get_dir(&mut self, path: &[&str]) -> Option<embedded_sdmmc::RawDirectory> {
+    fn get_dir(&mut self, path: &[&str]) -> Result<embedded_sdmmc::RawDirectory, FSError> {
         let manager = get_volume_manager();
-        let volume0 = manager.open_volume(VolumeIdx(0)).ok()?;
+        let volume0 = manager.open_volume(VolumeIdx(0))?;
         let volume0 = volume0.to_raw_volume();
-        let mut dir = manager.open_root_dir(volume0).ok()?;
+        let mut dir = manager.open_root_dir(volume0)?;
         if let Ok(new_dir) = manager.open_dir(dir, ".firefly") {
             dir = new_dir;
         }
         for part in path {
-            dir = manager.open_dir(dir, *part).ok()?;
+            dir = manager.open_dir(dir, *part)?;
         }
-        Some(dir)
+        Ok(dir)
     }
 }
 
@@ -90,7 +90,7 @@ impl Device for DeviceImpl {
         self.log(&msg);
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
         // self.flash.read(offset, bytes);
         // match path {
         //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
@@ -98,42 +98,43 @@ impl Device for DeviceImpl {
         //     _ => None,
         // }
 
-        let (file_name, dir_path) = path.split_last()?;
+        let Some((file_name, dir_path)) = path.split_last() else {
+            return Err(FSError::OpenedDirAsFile);
+        };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager
-            .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
-            .ok()?;
-        Some(FileR { file })
+        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
+        Ok(FileR { file })
     }
 
-    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write> {
-        None
+    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
+        Err(FSError::Unsupported)
     }
 
-    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write> {
-        None
+    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
+        Err(FSError::Unsupported)
     }
 
-    fn get_file_size(&mut self, path: &[&str]) -> Option<u32> {
-        let (file_name, dir_path) = path.split_last()?;
+    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
+        let Some((file_name, dir_path)) = path.split_last() else {
+            return Err(FSError::OpenedDirAsFile);
+        };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager
-            .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
-            .ok()?;
-        manager.file_length(file).ok()
+        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
+        let size = manager.file_length(file)?;
+        Ok(size)
     }
 
-    fn remove_file(&mut self, path: &[&str]) -> bool {
-        false
+    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError> {
+        Err(FSError::Unsupported)
     }
 
-    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> Result<(), FSError>
     where
         F: FnMut(crate::EntryKind, &[u8]),
     {
-        false
+        Err(FSError::Unsupported)
     }
 
     fn network(&self) -> Self::Network {

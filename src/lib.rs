@@ -6,6 +6,7 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 mod gamepad;
 
+mod errors;
 mod shared;
 
 #[cfg_attr(target_family = "wasm", path = "web.rs")]
@@ -17,4 +18,5 @@ mod device;
 pub use device::DeviceConfig;
 
 pub use device::{DeviceImpl, NetworkImpl, SerialImpl};
+pub use errors::*;
 pub use shared::*;

@@ -1,40 +1,9 @@
-use core::fmt;
+use crate::errors::*;
 use core::fmt::Display;
 use core::ops::AddAssign;
 use core::ops::Sub;
 
 pub const SAMPLE_RATE: u32 = 44_100;
-
-pub enum NetworkError {
-    NotInitialized,
-    AlreadyInitialized,
-    UnknownPeer,
-    CannotBind,
-    PeerListFull,
-    RecvError,
-    SendError,
-    NetThreadDeallocated,
-    OutMessageTooBig,
-    Other(u32),
-}
-
-impl Display for NetworkError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use NetworkError::*;
-        match self {
-            NotInitialized => write!(f, "cannot send messages with Wi-Fi turned off"),
-            AlreadyInitialized => write!(f, "tried to initialize networking twice"),
-            UnknownPeer => write!(f, "cannot send messages to disconnected device"),
-            CannotBind => write!(f, "cannot find free address for networking"),
-            PeerListFull => write!(f, "cannot connect more devices"),
-            RecvError => write!(f, "cannot fetch network message"),
-            SendError => write!(f, "cannot send network message"),
-            NetThreadDeallocated => write!(f, "thread handling networking is already deallocated"),
-            OutMessageTooBig => write!(f, "outgoing message is too big"),
-            Other(n) => write!(f, "network error #{n}"),
-        }
-    }
-}
 
 /// A moment in time. Obtained from [Device::now].
 #[derive(Copy, Clone)]
@@ -153,27 +122,27 @@ pub trait Device {
     /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
     ///
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read>;
+    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError>;
 
     /// Create a new file and open it for write.
     ///
     /// If the file already exists, it will be overwritten.
-    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write>;
+    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError>;
 
     /// Write data to the end of the file.
-    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write>;
+    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError>;
 
     /// Get file size in bytes.
     ///
     /// None should be returned if file not found.
-    fn get_file_size(&mut self, path: &[&str]) -> Option<u32>;
+    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError>;
 
     /// Delete the given file if exists.
     ///
     /// Directories cannot be removed.
     ///
     /// Returns false only if there is an error.
-    fn remove_file(&mut self, path: &[&str]) -> bool;
+    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError>;
 
     /// Call the callback for each entry in the given directory.
     ///
@@ -181,7 +150,7 @@ pub trait Device {
     /// but embedded-sdmmc-rs [doesn't support it][1].
     ///
     /// [1]: https://github.com/rust-embedded-community/embedded-sdmmc-rs/issues/125
-    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> Result<(), FSError>
     where
         F: FnMut(EntryKind, &[u8]);
 
