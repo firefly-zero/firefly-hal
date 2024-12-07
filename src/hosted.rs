@@ -73,7 +73,7 @@ impl DeviceImpl {
     }
 }
 
-impl Device for DeviceImpl {
+impl<'a> Device<'a> for DeviceImpl {
     type Network = NetworkImpl;
     type Read = File;
     type Serial = SerialImpl;
@@ -104,14 +104,14 @@ impl Device for DeviceImpl {
         eprintln!("ERROR({src}): {msg}");
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&'a mut self, path: &[&str]) -> Option<Self::Read> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let file = std::fs::File::open(path).ok()?;
         Some(File { file })
     }
 
-    fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
+    fn create_file(&mut self, path: &[&str]) -> Option<Self::Write> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         if let Some(parent) = path.parent() {
@@ -121,7 +121,7 @@ impl Device for DeviceImpl {
         Some(File { file })
     }
 
-    fn append_file(&self, path: &[&str]) -> Option<Self::Write> {
+    fn append_file(&mut self, path: &[&str]) -> Option<Self::Write> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let mut opts = std::fs::OpenOptions::new();
@@ -129,7 +129,7 @@ impl Device for DeviceImpl {
         Some(File { file })
     }
 
-    fn get_file_size(&self, path: &[&str]) -> Option<u32> {
+    fn get_file_size(&mut self, path: &[&str]) -> Option<u32> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let Ok(meta) = std::fs::metadata(path) else {
@@ -138,7 +138,7 @@ impl Device for DeviceImpl {
         Some(meta.len() as u32)
     }
 
-    fn remove_file(&self, path: &[&str]) -> bool {
+    fn remove_file(&mut self, path: &[&str]) -> bool {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         let res = std::fs::remove_file(path);
@@ -148,7 +148,7 @@ impl Device for DeviceImpl {
         }
     }
 
-    fn iter_dir<F>(&self, path: &[&str], mut f: F) -> bool
+    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> bool
     where
         F: FnMut(EntryKind, &[u8]),
     {
