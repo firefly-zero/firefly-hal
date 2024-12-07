@@ -91,7 +91,7 @@ impl AddAssign for Duration {
     }
 }
 
-pub trait Device<'a> {
+pub trait Device {
     type Read: wasmi::Read + embedded_io::Read;
     type Write: embedded_io::Write;
     type Network: Network;
@@ -153,7 +153,7 @@ pub trait Device<'a> {
     /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
     ///
     /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
-    fn open_file(&'a mut self, path: &[&str]) -> Option<Self::Read>;
+    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read>;
 
     /// Create a new file and open it for write.
     ///

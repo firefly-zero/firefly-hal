@@ -1,5 +1,5 @@
 use crate::shared::*;
-use core::cell::Cell;
+use core::cell::{Cell, OnceCell};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_io::Write;
 use embedded_sdmmc::{Mode, SdCard, VolumeIdx, VolumeManager};
@@ -15,19 +15,22 @@ static META: &[u8] = include_bytes!("/home/gram/.local/share/firefly/roms/demo/g
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 
+static mut VOLUME_MANAGER: OnceCell<VolumeManager<SD, FakeTimesource>> = OnceCell::new();
+
+fn get_volume_manager() -> &'static mut VolumeManager<SD, FakeTimesource> {
+    unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
+}
+
 pub struct DeviceImpl {
     delay: Delay,
-    // uart: Cell<Option<Uart<'static, Blocking>>>,
-    volume_manager: VolumeManager<SD, FakeTimesource>,
 }
 
 impl DeviceImpl {
     pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
         let volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, FakeTimesource {});
+        unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
-            // uart: Cell::new(Some(uart)),
-            volume_manager,
         };
         Ok(device)
     }
@@ -40,10 +43,13 @@ impl DeviceImpl {
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Option<embedded_sdmmc::RawDirectory> {
-        let manager = &mut self.volume_manager;
+        let manager = get_volume_manager();
         let volume0 = manager.open_volume(VolumeIdx(0)).ok()?;
         let volume0 = volume0.to_raw_volume();
         let mut dir = manager.open_root_dir(volume0).ok()?;
+        if let Ok(new_dir) = manager.open_dir(dir, ".firefly") {
+            dir = new_dir;
+        }
         for part in path {
             dir = manager.open_dir(dir, *part).ok()?;
         }
@@ -51,8 +57,8 @@ impl DeviceImpl {
     }
 }
 
-impl<'a> Device<'a> for DeviceImpl {
-    type Read = FileR<'a>;
+impl Device for DeviceImpl {
+    type Read = FileR;
     type Write = FileW;
     type Network = NetworkImpl;
     type Serial = SerialImpl;
@@ -84,7 +90,7 @@ impl<'a> Device<'a> for DeviceImpl {
         self.log(&msg);
     }
 
-    fn open_file(&'a mut self, path: &[&str]) -> Option<Self::Read> {
+    fn open_file(&mut self, path: &[&str]) -> Option<Self::Read> {
         // self.flash.read(offset, bytes);
         // match path {
         //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
@@ -94,14 +100,11 @@ impl<'a> Device<'a> for DeviceImpl {
 
         let (file_name, dir_path) = path.split_last()?;
         let dir = self.get_dir(dir_path)?;
-        let file = self
-            .volume_manager
+        let manager = get_volume_manager();
+        let file = manager
             .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
             .ok()?;
-        Some(FileR {
-            volume_manager: &mut self.volume_manager,
-            file,
-        })
+        Some(FileR { file })
     }
 
     fn create_file(&mut self, path: &[&str]) -> Option<Self::Write> {
@@ -115,11 +118,11 @@ impl<'a> Device<'a> for DeviceImpl {
     fn get_file_size(&mut self, path: &[&str]) -> Option<u32> {
         let (file_name, dir_path) = path.split_last()?;
         let dir = self.get_dir(dir_path)?;
-        let file = self
-            .volume_manager
+        let manager = get_volume_manager();
+        let file = manager
             .open_file_in_dir(dir, *file_name, Mode::ReadOnly)
             .ok()?;
-        self.volume_manager.file_length(file).ok()
+        manager.file_length(file).ok()
     }
 
     fn remove_file(&mut self, path: &[&str]) -> bool {
@@ -166,27 +169,28 @@ impl embedded_io::Write for FileW {
     }
 }
 
-pub struct FileR<'a> {
-    volume_manager: &'a mut VolumeManager<SD, FakeTimesource>,
+pub struct FileR {
     file: embedded_sdmmc::RawFile,
 }
 
-impl<'a> embedded_io::ErrorType for FileR<'a> {
+impl embedded_io::ErrorType for FileR {
     type Error = embedded_io::ErrorKind;
 }
 
-impl<'a> embedded_io::Read for FileR<'a> {
+impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        match self.volume_manager.read(self.file, buf) {
+        let manager = get_volume_manager();
+        match manager.read(self.file, buf) {
             Ok(size) => Ok(size),
             Err(_) => Err(embedded_io::ErrorKind::Other),
         }
     }
 }
 
-impl<'a> wasmi::Read for FileR<'a> {
+impl wasmi::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        match self.volume_manager.read(self.file, buf) {
+        let manager = get_volume_manager();
+        match manager.read(self.file, buf) {
             Ok(size) => Ok(size),
             Err(_) => Err(wasmi::errors::ReadError::UnknownError),
         }
