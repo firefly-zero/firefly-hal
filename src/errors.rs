@@ -8,6 +8,7 @@ pub enum FSError {
     /// The given `VolumeIdx` was bad,
     NoSuchVolume,
     /// The given filename was bad
+    #[cfg(target_os = "none")]
     FilenameError(embedded_sdmmc::FilenameError),
     /// Out of memory opening volumes
     TooManyOpenVolumes,
@@ -216,6 +217,7 @@ impl fmt::Display for FSError {
             DeviceError(e) => write!(f, "device error: {e}"),
             FormatError(e) => write!(f, "format error: {e}"),
             NoSuchVolume => write!(f, "no such volume"),
+            #[cfg(target_os = "none")]
             FilenameError(e) => write!(f, "filename error: {e:?}"),
             TooManyOpenVolumes => write!(f, "too many open volumes"),
             TooManyOpenDirs => write!(f, "too many open dirs"),
