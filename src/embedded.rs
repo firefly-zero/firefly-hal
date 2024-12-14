@@ -1,18 +1,23 @@
 use crate::{errors::FSError, shared::*};
 use core::cell::OnceCell;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_sdmmc::{Mode, SdCard, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{Mode, RawVolume, SdCard, VolumeIdx, VolumeManager};
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
 use fugit::MicrosDurationU64;
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
-type VM = VolumeManager<SD, FakeTimesource>;
+type VM = VolumeManager<SD, FakeTimesource, 12, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
+static mut VOLUME: Option<RawVolume> = None;
 
 fn get_volume_manager() -> &'static mut VM {
     unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
+}
+
+fn get_volume() -> RawVolume {
+    unsafe { VOLUME.unwrap() }
 }
 
 pub struct DeviceImpl {
@@ -21,8 +26,12 @@ pub struct DeviceImpl {
 
 impl DeviceImpl {
     pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
-        let volume_manager: VM = embedded_sdmmc::VolumeManager::new(sdcard, FakeTimesource {});
-        volume_manager.open_volume(VolumeIdx(0)).unwrap();
+        let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
+        let volume = volume_manager
+            .open_volume(VolumeIdx(0))
+            .unwrap()
+            .to_raw_volume();
+        unsafe { VOLUME = Some(volume) };
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
@@ -39,19 +48,8 @@ impl DeviceImpl {
 
     fn get_dir(&mut self, path: &[&str]) -> Result<embedded_sdmmc::RawDirectory, FSError> {
         let manager = get_volume_manager();
-        let volume0 = manager.open_volume(VolumeIdx(0))?;
-        let volume0 = volume0.to_raw_volume();
-        let mut dir = manager.open_root_dir(volume0)?;
-        // if let Ok(new_dir) = manager.open_dir(dir, ".firefly") {
-        //     dir = new_dir;
-        // }
-        // let res = manager.iterate_dir(dir, |e| {
-        //     esp_println::println!("<{}>", e.name);
-        // });
-        // if let Err(err) = res {
-        //     let err = FSError::from(err);
-        //     panic!("{err}")
-        // }
+        let volume = get_volume();
+        let mut dir = manager.open_root_dir(volume)?;
         for part in path {
             dir = manager.open_dir(dir, *part)?;
         }
