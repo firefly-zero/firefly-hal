@@ -108,11 +108,23 @@ impl Device for DeviceImpl {
     }
 
     fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        Err(FSError::Unsupported)
+        let Some((file_name, dir_path)) = path.split_last() else {
+            return Err(FSError::OpenedDirAsFile);
+        };
+        let dir = self.get_dir(dir_path)?;
+        let manager = get_volume_manager();
+        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteCreate)?;
+        Ok(FileW { file })
     }
 
     fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        Err(FSError::Unsupported)
+        let Some((file_name, dir_path)) = path.split_last() else {
+            return Err(FSError::OpenedDirAsFile);
+        };
+        let dir = self.get_dir(dir_path)?;
+        let manager = get_volume_manager();
+        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteAppend)?;
+        Ok(FileW { file })
     }
 
     fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
@@ -128,14 +140,26 @@ impl Device for DeviceImpl {
     }
 
     fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError> {
-        Err(FSError::Unsupported)
+        let Some((file_name, dir_path)) = path.split_last() else {
+            return Err(FSError::OpenedDirAsFile);
+        };
+        let dir = self.get_dir(dir_path)?;
+        let manager = get_volume_manager();
+        manager.delete_file_in_dir(dir, *file_name)?;
+        Ok(())
     }
 
-    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> Result<(), FSError>
+    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> Result<(), FSError>
     where
         F: FnMut(crate::EntryKind, &[u8]),
     {
-        Err(FSError::Unsupported)
+        let dir = self.get_dir(path)?;
+        let manager = get_volume_manager();
+        manager.iterate_dir(dir, |entry| {
+            let name = entry.name.base_name();
+            f(EntryKind::File, name);
+        })?;
+        Ok(())
     }
 
     fn network(&self) -> Self::Network {
@@ -155,7 +179,9 @@ impl Device for DeviceImpl {
     }
 }
 
-pub struct FileW {}
+pub struct FileW {
+    file: embedded_sdmmc::RawFile,
+}
 
 impl embedded_io::ErrorType for FileW {
     type Error = embedded_io::ErrorKind;
@@ -163,11 +189,19 @@ impl embedded_io::ErrorType for FileW {
 
 impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        Err(embedded_io::ErrorKind::Other)
+        let manager = get_volume_manager();
+        match manager.write(self.file, buf) {
+            Ok(()) => Ok(buf.len()),
+            Err(_) => Err(embedded_io::ErrorKind::Other),
+        }
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        Err(embedded_io::ErrorKind::Other)
+        let manager = get_volume_manager();
+        match manager.flush_file(self.file) {
+            Ok(()) => Ok(()),
+            Err(_) => Err(embedded_io::ErrorKind::Other),
+        }
     }
 }
 
