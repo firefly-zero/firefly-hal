@@ -2,13 +2,13 @@ use core::fmt;
 
 pub enum FSError {
     /// The underlying block device threw an error.
-    DeviceError,
+    DeviceError(alloc::string::String),
     /// The filesystem is badly formatted (or this code is buggy).
     FormatError(&'static str),
     /// The given `VolumeIdx` was bad,
     NoSuchVolume,
     /// The given filename was bad
-    FilenameError,
+    FilenameError(embedded_sdmmc::FilenameError),
     /// Out of memory opening volumes
     TooManyOpenVolumes,
     /// Out of memory opening directories
@@ -111,10 +111,10 @@ impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
     fn from(value: embedded_sdmmc::Error<T>) -> Self {
         use embedded_sdmmc::Error::*;
         match value {
-            DeviceError(_) => Self::DeviceError,
+            DeviceError(e) => Self::DeviceError(alloc::format!("{e:?}")),
             FormatError(e) => Self::FormatError(e),
             NoSuchVolume => Self::NoSuchVolume,
-            FilenameError(_) => Self::FilenameError,
+            FilenameError(e) => Self::FilenameError(e),
             TooManyOpenVolumes => Self::TooManyOpenVolumes,
             TooManyOpenDirs => Self::TooManyOpenDirs,
             TooManyOpenFiles => Self::TooManyOpenFiles,
@@ -213,10 +213,10 @@ impl fmt::Display for FSError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use FSError::*;
         match self {
-            DeviceError => write!(f, "device error"),
+            DeviceError(e) => write!(f, "device error: {e}"),
             FormatError(e) => write!(f, "format error: {e}"),
             NoSuchVolume => write!(f, "no such volume"),
-            FilenameError => write!(f, "filename error"),
+            FilenameError(e) => write!(f, "filename error: {e:?}"),
             TooManyOpenVolumes => write!(f, "too many open volumes"),
             TooManyOpenDirs => write!(f, "too many open dirs"),
             TooManyOpenFiles => write!(f, "too many open files"),

@@ -8,10 +8,10 @@ use esp_hal::{
 use fugit::MicrosDurationU64;
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
+type VM = VolumeManager<SD, FakeTimesource>;
+static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
 
-static mut VOLUME_MANAGER: OnceCell<VolumeManager<SD, FakeTimesource>> = OnceCell::new();
-
-fn get_volume_manager() -> &'static mut VolumeManager<SD, FakeTimesource> {
+fn get_volume_manager() -> &'static mut VM {
     unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
 }
 
@@ -21,7 +21,8 @@ pub struct DeviceImpl {
 
 impl DeviceImpl {
     pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
-        let volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, FakeTimesource {});
+        let volume_manager: VM = embedded_sdmmc::VolumeManager::new(sdcard, FakeTimesource {});
+        volume_manager.open_volume(VolumeIdx(0)).unwrap();
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
