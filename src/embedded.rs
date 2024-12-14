@@ -1,7 +1,7 @@
 use crate::{errors::FSError, shared::*};
-use core::cell::OnceCell;
+use core::{cell::OnceCell, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_sdmmc::{Mode, RawVolume, SdCard, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{LfnBuffer, Mode, RawVolume, SdCard, VolumeIdx, VolumeManager};
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
@@ -51,7 +51,9 @@ impl DeviceImpl {
         let volume = get_volume();
         let mut dir = manager.open_root_dir(volume)?;
         for part in path {
+            let parent_dir = dir;
             dir = manager.open_dir(dir, *part)?;
+            _ = manager.close_dir(parent_dir);
         }
         Ok(dir)
     }
@@ -104,6 +106,7 @@ impl Device for DeviceImpl {
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
         let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
+        _ = manager.close_dir(dir);
         Ok(FileR { file })
     }
 
@@ -114,6 +117,7 @@ impl Device for DeviceImpl {
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
         let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteCreate)?;
+        _ = manager.close_dir(dir);
         Ok(FileW { file })
     }
 
@@ -124,6 +128,7 @@ impl Device for DeviceImpl {
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
         let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteAppend)?;
+        _ = manager.close_dir(dir);
         Ok(FileW { file })
     }
 
@@ -136,6 +141,7 @@ impl Device for DeviceImpl {
         let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
         let size = manager.file_length(file)?;
         _ = manager.close_file(file);
+        _ = manager.close_dir(dir);
         Ok(size)
     }
 
@@ -146,6 +152,7 @@ impl Device for DeviceImpl {
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
         manager.delete_file_in_dir(dir, *file_name)?;
+        _ = manager.close_dir(dir);
         Ok(())
     }
 
@@ -155,10 +162,27 @@ impl Device for DeviceImpl {
     {
         let dir = self.get_dir(path)?;
         let manager = get_volume_manager();
-        manager.iterate_dir(dir, |entry| {
-            let name = entry.name.base_name();
-            f(EntryKind::File, name);
+        let mut buf = [0u8; 64];
+        let mut lfnb = LfnBuffer::new(&mut buf);
+        manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
+            let base_name = entry.name.base_name();
+            if base_name.first() == Some(&b'.') {
+                return;
+            }
+            let name = match long_name {
+                Some(long_name) => long_name.as_bytes(),
+                None => base_name,
+            };
+            // let str_name = str::from_utf8(name).unwrap();
+            // esp_println::println!(" -- {str_name}");
+            let kind = if entry.attributes.is_directory() {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
+            f(kind, name);
         })?;
+        _ = manager.close_dir(dir);
         Ok(())
     }
 
