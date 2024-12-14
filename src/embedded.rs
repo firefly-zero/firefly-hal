@@ -8,7 +8,7 @@ use esp_hal::{
 use fugit::MicrosDurationU64;
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
-type VM = VolumeManager<SD, FakeTimesource, 12, 12, 1>;
+type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
 static mut VOLUME: Option<RawVolume> = None;
 
@@ -123,6 +123,7 @@ impl Device for DeviceImpl {
         let manager = get_volume_manager();
         let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
         let size = manager.file_length(file)?;
+        _ = manager.close_file(file);
         Ok(size)
     }
 
