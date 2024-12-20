@@ -1,7 +1,10 @@
 use crate::{errors::FSError, shared::*};
 use core::{cell::OnceCell, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
-use embedded_sdmmc::{LfnBuffer, Mode, RawVolume, SdCard, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{
+    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
+    VolumeManager,
+};
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
@@ -46,17 +49,47 @@ impl DeviceImpl {
         // self.uart.replace(uart);
     }
 
-    fn get_dir(&mut self, path: &[&str]) -> Result<embedded_sdmmc::RawDirectory, FSError> {
+    fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
         let manager = get_volume_manager();
         let volume = get_volume();
         let mut dir = manager.open_root_dir(volume)?;
         for part in path {
             let parent_dir = dir;
-            dir = manager.open_dir(dir, *part)?;
+            dir = open_dir(manager, dir, part)?;
             _ = manager.close_dir(parent_dir);
         }
         Ok(dir)
     }
+}
+
+/// Open directory with the given name.
+///
+/// If the name is a valid FAT-16 short name, use that name directly.
+/// Otherwise, iterate through all items in the directory, find an entry
+/// with the given long name, get its short name, and use that to open the directory.
+fn open_dir(manager: &mut VM, dir: RawDirectory, name: &str) -> Result<RawDirectory, FSError> {
+    let short_name = match name.to_short_filename() {
+        Ok(short_name) => short_name,
+        Err(_) => {
+            let mut result = None;
+            let mut buf = [0u8; 64];
+            let mut lfnb = LfnBuffer::new(&mut buf);
+            manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
+                if result.is_some() {
+                    return;
+                }
+                let Some(long_name) = long_name else { return };
+                if long_name.trim_ascii() == name {
+                    result = Some(entry.name.clone())
+                }
+            })?;
+            let Some(dir) = result else {
+                return Err(FSError::NotFound);
+            };
+            dir
+        }
+    };
+    Ok(manager.open_dir(dir, short_name)?)
 }
 
 impl Device for DeviceImpl {
@@ -170,7 +203,7 @@ impl Device for DeviceImpl {
                 return;
             }
             let name = match long_name {
-                Some(long_name) => long_name.as_bytes(),
+                Some(long_name) => long_name.trim_ascii().as_bytes(),
                 None => base_name,
             };
             // let str_name = str::from_utf8(name).unwrap();
