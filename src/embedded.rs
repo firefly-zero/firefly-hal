@@ -126,13 +126,6 @@ impl Device for DeviceImpl {
     }
 
     fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
-        // self.flash.read(offset, bytes);
-        // match path {
-        //     ["roms", "demo", "go-triangle", "_bin"] => Some(FileR { bin: BIN }),
-        //     ["roms", "demo", "go-triangle", "_meta"] => Some(FileR { bin: META }),
-        //     _ => None,
-        // }
-
         let Some((file_name, dir_path)) = path.split_last() else {
             return Err(FSError::OpenedDirAsFile);
         };
@@ -206,8 +199,6 @@ impl Device for DeviceImpl {
                 Some(long_name) => long_name.trim_ascii().as_bytes(),
                 None => base_name,
             };
-            // let str_name = str::from_utf8(name).unwrap();
-            // esp_println::println!(" -- {str_name}");
             let kind = if entry.attributes.is_directory() {
                 EntryKind::Dir
             } else {
