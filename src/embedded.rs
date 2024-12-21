@@ -253,6 +253,13 @@ impl embedded_io::Write for FileW {
     }
 }
 
+impl Drop for FileW {
+    fn drop(&mut self) {
+        let manager = get_volume_manager();
+        _ = manager.close_file(self.file);
+    }
+}
+
 pub struct FileR {
     file: embedded_sdmmc::RawFile,
 }
@@ -278,6 +285,13 @@ impl wasmi::Read for FileR {
             Ok(size) => Ok(size),
             Err(_) => Err(wasmi::errors::ReadError::UnknownError),
         }
+    }
+}
+
+impl Drop for FileR {
+    fn drop(&mut self) {
+        let manager = get_volume_manager();
+        _ = manager.close_file(self.file);
     }
 }
 
