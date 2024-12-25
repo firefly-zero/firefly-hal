@@ -14,33 +14,29 @@ use fugit::MicrosDurationU64;
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
-static mut ESP_NOW: OnceCell<EspNow> = OnceCell::new();
 
 fn get_volume_manager() -> &'static mut VM {
     unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
 }
 
-fn get_esp_now() -> &'static mut EspNow<'static> {
-    unsafe { ESP_NOW.get_mut() }.unwrap()
-}
-
-pub struct DeviceImpl {
+pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
+    esp_now: Option<EspNow<'a>>,
 }
 
-impl DeviceImpl {
-    pub fn new(sdcard: SD, esp_now: EspNow<'static>) -> Result<Self, esp_hal::uart::Error> {
+impl<'a> DeviceImpl<'a> {
+    pub fn new(sdcard: SD, esp_now: EspNow<'a>) -> Result<Self, esp_hal::uart::Error> {
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))
             .unwrap()
             .to_raw_volume();
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
-        unsafe { ESP_NOW.set(esp_now) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
             volume,
+            esp_now: Some(esp_now),
         };
         Ok(device)
     }
@@ -94,10 +90,10 @@ fn open_dir(manager: &mut VM, dir: RawDirectory, name: &str) -> Result<RawDirect
     Ok(manager.open_dir(dir, short_name)?)
 }
 
-impl Device for DeviceImpl {
+impl<'a> Device for DeviceImpl<'a> {
     type Read = FileR;
     type Write = FileW;
-    type Network = NetworkImpl;
+    type Network = NetworkImpl<'a>;
     type Serial = SerialImpl;
 
     fn now(&self) -> Instant {
@@ -213,7 +209,8 @@ impl Device for DeviceImpl {
     }
 
     fn network(&mut self) -> Self::Network {
-        NetworkImpl {}
+        let esp_now = self.esp_now.take().unwrap();
+        NetworkImpl { esp_now }
     }
 
     fn serial(&self) -> Self::Serial {
@@ -297,9 +294,13 @@ impl Drop for FileR {
     }
 }
 
-pub struct NetworkImpl {}
+pub struct NetworkImpl<'a> {
+    esp_now: EspNow<'a>,
+}
 
-impl Network for NetworkImpl {
+pub type Addr = [u8; 6];
+
+impl<'a> Network for NetworkImpl<'a> {
     type Addr = [u8; 6];
 
     fn start(&mut self) -> NetworkResult<()> {
@@ -318,20 +319,18 @@ impl Network for NetworkImpl {
 
     fn advertise(&mut self) -> NetworkResult<()> {
         let data = heapless::Vec::<u8, 64>::from_slice(b"HELLO").unwrap();
-        let esp_now = get_esp_now();
-        let waiter = esp_now.send(&BROADCAST_ADDRESS, &data)?;
+        let waiter = self.esp_now.send(&BROADCAST_ADDRESS, &data)?;
         waiter.wait()?;
         Ok(())
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        let esp_now = get_esp_now();
-        let Some(packet) = esp_now.receive() else {
+        let Some(packet) = self.esp_now.receive() else {
             return Ok(None);
         };
 
-        if !esp_now.peer_exists(&packet.info.src_address) {
-            esp_now.add_peer(PeerInfo {
+        if !self.esp_now.peer_exists(&packet.info.src_address) {
+            self.esp_now.add_peer(PeerInfo {
                 peer_address: packet.info.src_address,
                 lmk: None,
                 channel: None,
@@ -345,8 +344,7 @@ impl Network for NetworkImpl {
     }
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        let esp_now = get_esp_now();
-        let waiter = esp_now.send(&addr, data)?;
+        let waiter = self.esp_now.send(&addr, data)?;
         waiter.wait()?;
         Ok(())
     }

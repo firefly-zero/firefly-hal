@@ -2,6 +2,7 @@ use crate::gamepad::GamepadManager;
 use crate::*;
 use core::cell::Cell;
 use core::fmt::Display;
+use core::marker::PhantomData;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use rodio::Source;
 use std::io::{Read, Write};
@@ -46,7 +47,7 @@ impl Default for DeviceConfig {
     }
 }
 
-pub struct DeviceImpl {
+pub struct DeviceImpl<'a> {
     config: DeviceConfig,
     /// The time at which the device instance was created.
     start: std::time::Instant,
@@ -54,9 +55,10 @@ pub struct DeviceImpl {
     gamepad: GamepadManager,
     /// The audio buffer
     audio: AudioWriter,
+    _life: &'a PhantomData<()>,
 }
 
-impl DeviceImpl {
+impl<'a> DeviceImpl<'a> {
     pub fn new(config: DeviceConfig) -> Self {
         let audio = start_audio(&config);
         Self {
@@ -64,6 +66,7 @@ impl DeviceImpl {
             gamepad: GamepadManager::new(),
             audio,
             config,
+            _life: &PhantomData,
         }
     }
 
@@ -73,8 +76,8 @@ impl DeviceImpl {
     }
 }
 
-impl Device for DeviceImpl {
-    type Network = NetworkImpl;
+impl<'a> Device for DeviceImpl<'a> {
+    type Network = NetworkImpl<'a>;
     type Read = File;
     type Serial = SerialImpl;
     type Write = File;
@@ -224,16 +227,17 @@ impl embedded_io::Write for File {
     }
 }
 
-pub struct NetworkImpl {
+pub struct NetworkImpl<'a> {
     config: DeviceConfig,
     worker: Cell<Option<UdpWorker>>,
     r_in: mpsc::Receiver<NetMessage>,
     s_out: mpsc::Sender<NetMessage>,
     s_stop: mpsc::Sender<()>,
     local_addr: Option<SocketAddr>,
+    _life: &'a PhantomData<()>,
 }
 
-impl NetworkImpl {
+impl<'a> NetworkImpl<'a> {
     fn new(config: DeviceConfig) -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
@@ -250,11 +254,14 @@ impl NetworkImpl {
             s_out,
             s_stop,
             local_addr: None,
+            _life: &PhantomData,
         }
     }
 }
 
-impl Network for NetworkImpl {
+pub type Addr = SocketAddr;
+
+impl<'a> Network for NetworkImpl<'a> {
     type Addr = SocketAddr;
 
     fn local_addr(&self) -> SocketAddr {
