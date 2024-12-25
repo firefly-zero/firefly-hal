@@ -1,15 +1,15 @@
 # firefly-hal
 
-[ [🐙 github](https://github.com/firefly-zero/firefly-hal) ] [ [📦 crates.io](https://crates.io/crates/firefly-hal) ]
-
 Hardware Abstraction Layer for Firefly Zero device and emulators.
 
 This package is used by firefly-runtime. It provides a `Device` trait and 3 separate implementations for it. The correct implementation is picked automatically based on the build target.
 
 ## Installation
 
-```bash
-cargo add firefly-hal
+Install from git. We use dev version of embedded-sdmmc so the project cannot yet be published to crates.io.
+
+```toml
+firefly-hal = { git = "https://github.com/firefly-zero/firefly-hal" }
 ```
 
 ## Development
