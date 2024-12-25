@@ -318,7 +318,7 @@ impl Network for NetworkImpl {
         Ok(None)
     }
 
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> NetworkResult<()> {
         Ok(())
     }
 }
@@ -338,7 +338,7 @@ impl Serial for SerialImpl {
         Ok(None)
     }
 
-    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+    fn send(&mut self, _data: &[u8]) -> NetworkResult<()> {
         Ok(())
     }
 }

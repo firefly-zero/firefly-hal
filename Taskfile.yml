@@ -1,0 +1,40 @@
+# https://taskfile.dev
+version: "3"
+
+tasks:
+  run-host:
+    internal: true
+    cmds:
+      - mv .cargo/config.toml .cargo/config.toml.bck
+      - defer: mv .cargo/config.toml.bck .cargo/config.toml
+      - cargo {{.COMMAND}}
+
+  build-esp:
+    - cargo build
+  build-host:
+    - task: run-host
+      vars: { COMMAND: build }
+  test-host:
+    cmds:
+      - task: run-host
+        vars: { COMMAND: test }
+  test:
+    - task: build-esp
+    - task: build-host
+    - task: test-host
+
+  lint-esp:
+    cmds:
+      - cargo clippy
+  lint-host:
+    cmds:
+      - task: run-host
+        vars: { COMMAND: clippy }
+  lint:
+    - task: lint-esp
+    - task: lint-host
+
+  all:
+    cmds:
+      - task: test
+      - task: lint
