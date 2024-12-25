@@ -181,7 +181,7 @@ impl Device for DeviceImpl {
         self.audio.get_write_buf()
     }
 
-    fn network(&self) -> Self::Network {
+    fn network(&mut self) -> Self::Network {
         NetworkImpl::new(self.config.clone())
     }
 

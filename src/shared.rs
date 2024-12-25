@@ -154,7 +154,7 @@ pub trait Device {
     where
         F: FnMut(EntryKind, &[u8]);
 
-    fn network(&self) -> Self::Network;
+    fn network(&mut self) -> Self::Network;
 
     /// Access the USB serial port.
     ///

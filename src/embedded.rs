@@ -30,13 +30,14 @@ pub struct DeviceImpl {
 }
 
 impl DeviceImpl {
-    pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sdcard: SD, esp_now: EspNow<'static>) -> Result<Self, esp_hal::uart::Error> {
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))
             .unwrap()
             .to_raw_volume();
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
+        unsafe { ESP_NOW.set(esp_now) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
             volume,
@@ -211,7 +212,7 @@ impl Device for DeviceImpl {
         Ok(())
     }
 
-    fn network(&self) -> Self::Network {
+    fn network(&mut self) -> Self::Network {
         NetworkImpl {}
     }
 
