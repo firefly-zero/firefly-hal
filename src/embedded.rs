@@ -13,18 +13,14 @@ use fugit::MicrosDurationU64;
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
-static mut VOLUME: Option<RawVolume> = None;
 
 fn get_volume_manager() -> &'static mut VM {
     unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
 }
 
-fn get_volume() -> RawVolume {
-    unsafe { VOLUME.unwrap() }
-}
-
 pub struct DeviceImpl {
     delay: Delay,
+    volume: RawVolume,
 }
 
 impl DeviceImpl {
@@ -34,10 +30,10 @@ impl DeviceImpl {
             .open_volume(VolumeIdx(0))
             .unwrap()
             .to_raw_volume();
-        unsafe { VOLUME = Some(volume) };
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
         let device = Self {
             delay: Delay::new(),
+            volume,
         };
         Ok(device)
     }
@@ -51,8 +47,7 @@ impl DeviceImpl {
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
         let manager = get_volume_manager();
-        let volume = get_volume();
-        let mut dir = manager.open_root_dir(volume)?;
+        let mut dir = manager.open_root_dir(self.volume)?;
         for part in path {
             let parent_dir = dir;
             dir = open_dir(manager, dir, part)?;
