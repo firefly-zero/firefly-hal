@@ -45,7 +45,25 @@ tasks:
     - task: lint-esp
     - task: lint-host
 
+  format:
+    desc: run code formatters
+    cmds:
+      - cargo fmt
+
+  release:
+    desc: build and publish release
+    cmds:
+      - test {{.CLI_ARGS}}
+      - grep -F '"{{.CLI_ARGS}}"' Cargo.toml
+      - cargo build --release
+      - cargo publish
+      - git tag {{.CLI_ARGS}}
+      - git push
+      - git push --tags
+      - gh release create --generate-notes {{.CLI_ARGS}}
+
   all:
     cmds:
-      - task: test
+      - task: format
       - task: lint
+      - task: test
