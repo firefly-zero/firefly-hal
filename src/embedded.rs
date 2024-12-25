@@ -8,14 +8,20 @@ use embedded_sdmmc::{
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
+use esp_wifi::esp_now::{EspNow, PeerInfo, BROADCAST_ADDRESS};
 use fugit::MicrosDurationU64;
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
+static mut ESP_NOW: OnceCell<EspNow> = OnceCell::new();
 
 fn get_volume_manager() -> &'static mut VM {
     unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
+}
+
+fn get_esp_now() -> &'static mut EspNow<'static> {
+    unsafe { ESP_NOW.get_mut() }.unwrap()
 }
 
 pub struct DeviceImpl {
@@ -293,7 +299,7 @@ impl Drop for FileR {
 pub struct NetworkImpl {}
 
 impl Network for NetworkImpl {
-    type Addr = ();
+    type Addr = [u8; 6];
 
     fn start(&mut self) -> NetworkResult<()> {
         Ok(())
@@ -303,17 +309,44 @@ impl Network for NetworkImpl {
         Ok(())
     }
 
-    fn local_addr(&self) -> Self::Addr {}
+    fn local_addr(&self) -> Self::Addr {
+        let mut addr = [0u8; 6];
+        esp_wifi::wifi::sta_mac(&mut addr);
+        addr
+    }
 
     fn advertise(&mut self) -> NetworkResult<()> {
+        let data = heapless::Vec::<u8, 64>::from_slice(b"HELLO").unwrap();
+        let esp_now = get_esp_now();
+        let waiter = esp_now.send(&BROADCAST_ADDRESS, &data)?;
+        waiter.wait()?;
         Ok(())
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        Ok(None)
+        let esp_now = get_esp_now();
+        let Some(packet) = esp_now.receive() else {
+            return Ok(None);
+        };
+
+        if !esp_now.peer_exists(&packet.info.src_address) {
+            esp_now.add_peer(PeerInfo {
+                peer_address: packet.info.src_address,
+                lmk: None,
+                channel: None,
+                encrypt: false,
+            })?;
+        }
+
+        let data = packet.data();
+        let data = heapless::Vec::<u8, 64>::from_slice(data).unwrap();
+        Ok(Some((packet.info.src_address, data)))
     }
 
-    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> NetworkResult<()> {
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+        let esp_now = get_esp_now();
+        let waiter = esp_now.send(&addr, data)?;
+        waiter.wait()?;
         Ok(())
     }
 }

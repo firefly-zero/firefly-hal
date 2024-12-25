@@ -273,7 +273,37 @@ pub enum NetworkError {
     SendError,
     NetThreadDeallocated,
     OutMessageTooBig,
+    Error(&'static str),
     Other(u32),
+}
+
+#[cfg(target_os = "none")]
+impl From<esp_wifi::esp_now::EspNowError> for NetworkError {
+    fn from(value: esp_wifi::esp_now::EspNowError) -> Self {
+        use esp_wifi::esp_now::EspNowError;
+        match value {
+            EspNowError::Error(error) => match error {
+                esp_wifi::esp_now::Error::NotInitialized => Self::NotInitialized,
+                esp_wifi::esp_now::Error::InvalidArgument => Self::Error("invalid argument"),
+                esp_wifi::esp_now::Error::OutOfMemory => Self::Error("out of memory"),
+                esp_wifi::esp_now::Error::PeerListFull => Self::PeerListFull,
+                esp_wifi::esp_now::Error::NotFound => Self::Error("not found"),
+                esp_wifi::esp_now::Error::InternalError => Self::Error("internal error"),
+                esp_wifi::esp_now::Error::PeerExists => Self::Error("peer exists"),
+                esp_wifi::esp_now::Error::InterfaceError => Self::Error("interface error"),
+                esp_wifi::esp_now::Error::Other(error) => Self::Other(error),
+            },
+            EspNowError::SendFailed => Self::SendError,
+            EspNowError::DuplicateInstance => Self::AlreadyInitialized,
+            EspNowError::Initialization(error) => match error {
+                esp_wifi::wifi::WifiError::NotInitialized => Self::NotInitialized,
+                esp_wifi::wifi::WifiError::InternalError(_) => Self::Error("internal error"),
+                esp_wifi::wifi::WifiError::Disconnected => Self::NetThreadDeallocated,
+                esp_wifi::wifi::WifiError::UnknownWifiMode => Self::Error("unknown wifi mode"),
+                esp_wifi::wifi::WifiError::Unsupported => Self::Error("unsupported"),
+            },
+        }
+    }
 }
 
 impl fmt::Display for NetworkError {
@@ -289,6 +319,7 @@ impl fmt::Display for NetworkError {
             SendError => write!(f, "cannot send network message"),
             NetThreadDeallocated => write!(f, "thread handling networking is already deallocated"),
             OutMessageTooBig => write!(f, "outgoing message is too big"),
+            Error(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
         }
     }
