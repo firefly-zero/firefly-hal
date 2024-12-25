@@ -8,11 +8,22 @@ tasks:
       - mv .cargo/config.toml .cargo/config.toml.bck
       - defer: mv .cargo/config.toml.bck .cargo/config.toml
       - cargo {{.COMMAND}}
+  run-web:
+    internal: true
+    cmds:
+      - mv .cargo/config.toml .cargo/config.toml.bck
+      - defer: mv .cargo/config.toml.bck .cargo/config.toml
+      - mv rust-toolchain.toml rust-toolchain.toml.bck
+      - defer: mv rust-toolchain.toml.bck rust-toolchain.toml
+      - cargo {{.COMMAND}} --target wasm32-unknown-unknown
 
   build-esp:
     - cargo build
   build-host:
     - task: run-host
+      vars: { COMMAND: build }
+  build-web:
+    - task: run-web
       vars: { COMMAND: build }
   test-host:
     cmds:
