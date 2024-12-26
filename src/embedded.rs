@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*};
-use core::{cell::OnceCell, str};
+use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
@@ -8,7 +8,6 @@ use embedded_sdmmc::{
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
-use esp_wifi::esp_now::{EspNow, PeerInfo, BROADCAST_ADDRESS};
 use fugit::MicrosDurationU64;
 
 type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
@@ -22,11 +21,11 @@ fn get_volume_manager() -> &'static mut VM {
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
-    esp_now: Option<EspNow<'a>>,
+    _life: &'a PhantomData<()>,
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sdcard: SD, esp_now: EspNow<'a>) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))
@@ -36,7 +35,7 @@ impl<'a> DeviceImpl<'a> {
         let device = Self {
             delay: Delay::new(),
             volume,
-            esp_now: Some(esp_now),
+            _life: &PhantomData,
         };
         Ok(device)
     }
@@ -209,8 +208,9 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn network(&mut self) -> Self::Network {
-        let esp_now = self.esp_now.take().unwrap();
-        NetworkImpl { esp_now }
+        NetworkImpl {
+            _life: &PhantomData,
+        }
     }
 
     fn serial(&self) -> Self::Serial {
@@ -295,7 +295,7 @@ impl Drop for FileR {
 }
 
 pub struct NetworkImpl<'a> {
-    esp_now: EspNow<'a>,
+    _life: &'a PhantomData<()>,
 }
 
 pub type Addr = [u8; 6];
@@ -312,41 +312,19 @@ impl<'a> Network for NetworkImpl<'a> {
     }
 
     fn local_addr(&self) -> Self::Addr {
-        let mut addr = [0u8; 6];
-        esp_wifi::wifi::sta_mac(&mut addr);
-        addr
+        todo!()
     }
 
     fn advertise(&mut self) -> NetworkResult<()> {
-        let data = heapless::Vec::<u8, 64>::from_slice(b"HELLO").unwrap();
-        let waiter = self.esp_now.send(&BROADCAST_ADDRESS, &data)?;
-        waiter.wait()?;
-        Ok(())
+        todo!()
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
-        let Some(packet) = self.esp_now.receive() else {
-            return Ok(None);
-        };
-
-        if !self.esp_now.peer_exists(&packet.info.src_address) {
-            self.esp_now.add_peer(PeerInfo {
-                peer_address: packet.info.src_address,
-                lmk: None,
-                channel: None,
-                encrypt: false,
-            })?;
-        }
-
-        let data = packet.data();
-        let data = heapless::Vec::<u8, 64>::from_slice(data).unwrap();
-        Ok(Some((packet.info.src_address, data)))
+        todo!()
     }
 
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        let waiter = self.esp_now.send(&addr, data)?;
-        waiter.wait()?;
-        Ok(())
+    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> NetworkResult<()> {
+        todo!()
     }
 }
 
