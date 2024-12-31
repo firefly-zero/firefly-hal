@@ -1,4 +1,5 @@
 use crate::errors::*;
+use alloc::boxed::Box;
 use core::fmt::Display;
 use core::ops::AddAssign;
 use core::ops::Sub;
@@ -187,7 +188,8 @@ pub trait Network {
     fn advertise(&mut self) -> NetworkResult<()>;
 
     /// Get a pending message, if any. Non-blocking.
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>>;
+    #[expect(clippy::type_complexity)]
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>>;
 
     /// Send a raw message to the given device. Non-blocking.
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
@@ -196,7 +198,7 @@ pub trait Network {
 pub trait Serial {
     fn start(&mut self) -> NetworkResult<()>;
     fn stop(&mut self) -> NetworkResult<()>;
-    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>>;
+    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>>;
     fn send(&mut self, data: &[u8]) -> NetworkResult<()>;
 }
 

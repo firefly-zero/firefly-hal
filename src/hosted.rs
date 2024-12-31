@@ -1,5 +1,6 @@
 use crate::gamepad::GamepadManager;
 use crate::*;
+use alloc::boxed::Box;
 use core::cell::Cell;
 use core::fmt::Display;
 use core::marker::PhantomData;
@@ -284,7 +285,8 @@ impl<'a> Network for NetworkImpl<'a> {
     }
 
     fn advertise(&mut self) -> NetworkResult<()> {
-        let hello = heapless::Vec::from_slice(b"HELLO").unwrap();
+        let hello = b"HELLO".to_owned();
+        let hello: Box<[u8]> = Box::new(hello);
         for ip in &self.config.peers {
             for port in UDP_PORT_MIN..=UDP_PORT_MAX {
                 let addr = SocketAddr::new(*ip, port);
@@ -297,14 +299,15 @@ impl<'a> Network for NetworkImpl<'a> {
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
         Ok(self.r_in.try_recv().ok())
     }
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
-        let Ok(msg) = heapless::Vec::from_slice(data) else {
+        if data.len() >= 200 {
             return Err(NetworkError::OutMessageTooBig);
         };
+        let msg = data.to_vec().into_boxed_slice();
         let res = self.s_out.send((addr, msg));
         if res.is_err() {
             return Err(NetworkError::NetThreadDeallocated);
@@ -357,14 +360,15 @@ impl Serial for SerialImpl {
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>> {
+    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
         Ok(self.r_in.try_recv().ok())
     }
 
     fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
-        let Ok(msg) = heapless::Vec::from_slice(data) else {
+        if data.len() >= 200 {
             return Err(NetworkError::OutMessageTooBig);
         };
+        let msg = data.to_vec().into_boxed_slice();
         let res = self.s_out.send(msg);
         if res.is_err() {
             return Err(NetworkError::NetThreadDeallocated);
@@ -372,8 +376,8 @@ impl Serial for SerialImpl {
         Ok(())
     }
 }
-type NetMessage = (SocketAddr, heapless::Vec<u8, 64>);
-type SerialMessage = heapless::Vec<u8, 64>;
+type NetMessage = (SocketAddr, Box<[u8]>);
+type SerialMessage = Box<[u8]>;
 
 struct UdpWorker {
     s_in: mpsc::Sender<NetMessage>,
@@ -410,7 +414,8 @@ impl UdpWorker {
                 if size == 0 {
                     continue;
                 }
-                let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
+                buf.truncate(size);
+                let buf = buf.into_boxed_slice();
                 _ = self.s_in.send((addr, buf));
             }
             if let Ok((addr, buf)) = self.r_out.try_recv() {
@@ -456,14 +461,15 @@ impl TcpWorker {
                 };
 
                 for stream in streams.iter_mut() {
-                    let mut buf = vec![0; 64];
+                    let mut buf = vec![0; 200];
                     let Ok(size) = stream.read(&mut buf) else {
                         continue;
                     };
                     if size == 0 {
                         continue;
                     }
-                    let buf = heapless::Vec::from_slice(&buf[..size]).unwrap();
+                    buf.truncate(size);
+                    let buf = buf.into_boxed_slice();
                     _ = self.s_in.send(buf);
                 }
                 if let Ok(buf) = self.r_out.try_recv() {

@@ -1,4 +1,5 @@
 use crate::{errors::FSError, shared::*};
+use alloc::boxed::Box;
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_sdmmc::{
@@ -319,7 +320,7 @@ impl<'a> Network for NetworkImpl<'a> {
         todo!()
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, heapless::Vec<u8, 64>)>> {
+    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
         todo!()
     }
 
@@ -339,7 +340,7 @@ impl Serial for SerialImpl {
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<heapless::Vec<u8, 64>>> {
+    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
         Ok(None)
     }
 
