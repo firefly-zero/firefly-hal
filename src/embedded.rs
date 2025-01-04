@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*};
-use alloc::boxed::Box;
+use alloc::{boxed::Box, rc::Rc};
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_sdmmc::{
@@ -9,9 +9,12 @@ use embedded_sdmmc::{
 use esp_hal::{
     delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
 };
+use firefly_types::Encode;
 use fugit::MicrosDurationU64;
 
-type SD = SdCard<ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>, Delay>;
+type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>;
+type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>;
+type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
 
@@ -22,11 +25,12 @@ fn get_volume_manager() -> &'static mut VM {
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
+    io_spi: Rc<IoSpi>,
     _life: &'a PhantomData<()>,
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sdcard: SD) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sdcard: SD, io_spi: IoSpi) -> Result<Self, esp_hal::uart::Error> {
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))
@@ -36,6 +40,7 @@ impl<'a> DeviceImpl<'a> {
         let device = Self {
             delay: Delay::new(),
             volume,
+            io_spi: Rc::new(io_spi),
             _life: &PhantomData,
         };
         Ok(device)
@@ -210,6 +215,9 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn network(&mut self) -> Self::Network {
         NetworkImpl {
+            io: FireflyIO {
+                spi: Rc::clone(&self.io_spi),
+            },
             _life: &PhantomData,
         }
     }
@@ -295,7 +303,29 @@ impl Drop for FileR {
     }
 }
 
+struct FireflyIO {
+    spi: Rc<IoSpi>,
+}
+
+impl FireflyIO {
+    fn transfer(&mut self, req: firefly_types::spi::Request<'_>) -> alloc::vec::Vec<u8> {
+        let mut raw = req.encode_vec().unwrap();
+        let spi: &mut IoSpi = Rc::get_mut(&mut self.spi).unwrap();
+        let bus = spi.bus_mut();
+        // send request
+        bus.transfer(&mut [raw.len() as u8]).unwrap();
+        bus.transfer(&mut raw[..]).unwrap();
+        // read response
+        bus.transfer(&mut raw[..1]).unwrap();
+        let size = raw[0] as usize;
+        raw.resize(size, 0);
+        bus.transfer(&mut raw[..]).unwrap();
+        raw
+    }
+}
+
 pub struct NetworkImpl<'a> {
+    io: FireflyIO,
     _life: &'a PhantomData<()>,
 }
 
@@ -305,6 +335,10 @@ impl<'a> Network for NetworkImpl<'a> {
     type Addr = [u8; 6];
 
     fn start(&mut self) -> NetworkResult<()> {
+        let req = firefly_types::spi::Request::NetStart;
+        let resp = self.io.transfer(req);
+        let resp = firefly_types::spi::Response::decode(&resp).unwrap();
+        assert_eq!(resp, firefly_types::spi::Response::NetStarted);
         Ok(())
     }
 
