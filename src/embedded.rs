@@ -1,6 +1,7 @@
 use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
 use core::{cell::OnceCell, marker::PhantomData, str};
+use embedded_hal::spi::SpiDevice;
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
@@ -312,20 +313,21 @@ impl FireflyIO {
         &mut self,
         req: firefly_types::spi::Request<'_>,
     ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
-        let mut raw = req.encode_vec().unwrap();
         let spi: &mut IoSpi = Rc::get_mut(&mut self.spi).unwrap();
-        let bus = spi.bus_mut();
+
         // send request
+        let mut raw = req.encode_vec().unwrap();
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
-        bus.transfer(&mut [size])?;
-        bus.transfer(&mut raw[..])?;
+        spi.write(&[size])?;
+        spi.write(&raw[..])?;
+
         // read response
-        bus.transfer(&mut raw[..1])?;
+        spi.read(&mut raw[..1])?;
         let size = usize::from(raw[0]);
         raw.resize(size, 0);
-        bus.transfer(&mut raw[..])?;
+        spi.read(&mut raw[..])?;
         Ok(raw)
     }
 }

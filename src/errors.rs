@@ -280,6 +280,20 @@ pub enum NetworkError {
 }
 
 #[cfg(target_os = "none")]
+impl From<embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>>
+    for NetworkError
+{
+    fn from(
+        value: embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>,
+    ) -> Self {
+        match value {
+            embedded_hal_bus::spi::DeviceError::Spi(err) => Self::Spi(err),
+            embedded_hal_bus::spi::DeviceError::Cs(_) => Self::Error("CS error"),
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
 impl From<esp_hal::spi::Error> for NetworkError {
     fn from(value: esp_hal::spi::Error) -> Self {
         Self::Spi(value)
