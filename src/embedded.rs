@@ -330,6 +330,15 @@ impl FireflyIO {
         spi.read(&mut raw[..])?;
         Ok(raw)
     }
+
+    fn decode<'b>(&self, raw: &'b [u8]) -> Result<firefly_types::spi::Response<'b>, NetworkError> {
+        use firefly_types::spi::Response;
+        let resp = Response::decode(raw).unwrap();
+        if let Response::NetError(err) = resp {
+            return Err(NetworkError::Other(err));
+        }
+        Ok(resp)
+    }
 }
 
 pub struct NetworkImpl<'a> {
@@ -344,9 +353,11 @@ impl<'a> Network for NetworkImpl<'a> {
 
     fn start(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetStart;
-        let resp = self.io.transfer(req)?;
-        let resp = firefly_types::spi::Response::decode(&resp).unwrap();
-        assert_eq!(resp, firefly_types::spi::Response::NetStarted);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != firefly_types::spi::Response::NetStarted {
+            return Err(NetworkError::UnexpectedResp);
+        }
         Ok(())
     }
 

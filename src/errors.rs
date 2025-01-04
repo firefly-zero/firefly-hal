@@ -273,6 +273,7 @@ pub enum NetworkError {
     SendError,
     NetThreadDeallocated,
     OutMessageTooBig,
+    UnexpectedResp,
     #[cfg(target_os = "none")]
     Spi(esp_hal::spi::Error),
     Error(&'static str),
@@ -313,6 +314,7 @@ impl fmt::Display for NetworkError {
             SendError => write!(f, "cannot send network message"),
             NetThreadDeallocated => write!(f, "thread handling networking is already deallocated"),
             OutMessageTooBig => write!(f, "outgoing message is too big"),
+            UnexpectedResp => write!(f, "unexpected response"),
             Error(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
 
