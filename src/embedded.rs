@@ -31,7 +31,8 @@ pub struct DeviceImpl<'a> {
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sdcard: SD, io_spi: IoSpi) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sd_spi: SdSpi, io_spi: IoSpi) -> Result<Self, esp_hal::uart::Error> {
+        let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))

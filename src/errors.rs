@@ -346,3 +346,46 @@ impl fmt::Display for NetworkError {
         }
     }
 }
+
+impl From<NetworkError> for u32 {
+    fn from(value: NetworkError) -> Self {
+        match value {
+            NetworkError::NotInitialized => 0,
+            NetworkError::AlreadyInitialized => 1,
+            NetworkError::UnknownPeer => 2,
+            NetworkError::CannotBind => 3,
+            NetworkError::PeerListFull => 4,
+            NetworkError::RecvError => 5,
+            NetworkError::SendError => 6,
+            NetworkError::NetThreadDeallocated => 7,
+            NetworkError::OutMessageTooBig => 8,
+            NetworkError::UnexpectedResp => 9,
+            #[cfg(target_os = "none")]
+            NetworkError::Spi(_) => 10,
+            NetworkError::Error(_) => 11,
+            NetworkError::Other(x) => 100 + x,
+        }
+    }
+}
+
+impl From<u32> for NetworkError {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => NetworkError::NotInitialized,
+            1 => NetworkError::AlreadyInitialized,
+            2 => NetworkError::UnknownPeer,
+            3 => NetworkError::CannotBind,
+            4 => NetworkError::PeerListFull,
+            5 => NetworkError::RecvError,
+            6 => NetworkError::SendError,
+            7 => NetworkError::NetThreadDeallocated,
+            8 => NetworkError::OutMessageTooBig,
+            9 => NetworkError::UnexpectedResp,
+            #[cfg(target_os = "none")]
+            10 => NetworkError::Spi(esp_hal::spi::Error::Unknown),
+            11 => NetworkError::Error("unknown error"),
+            x if x >= 100 => NetworkError::Other(x - 100),
+            x => NetworkError::Other(x),
+        }
+    }
+}
