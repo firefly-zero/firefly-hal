@@ -273,8 +273,17 @@ pub enum NetworkError {
     SendError,
     NetThreadDeallocated,
     OutMessageTooBig,
+    #[cfg(target_os = "none")]
+    Spi(esp_hal::spi::Error),
     Error(&'static str),
     Other(u32),
+}
+
+#[cfg(target_os = "none")]
+impl From<esp_hal::spi::Error> for NetworkError {
+    fn from(value: esp_hal::spi::Error) -> Self {
+        Self::Spi(value)
+    }
 }
 
 impl fmt::Display for NetworkError {
@@ -292,6 +301,32 @@ impl fmt::Display for NetworkError {
             OutMessageTooBig => write!(f, "outgoing message is too big"),
             Error(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
+
+            #[cfg(target_os = "none")]
+            Spi(err) => {
+                write!(f, "SPI error: ")?;
+                use esp_hal::spi::Error::*;
+                match err {
+                    DmaError(dma_error) => {
+                        write!(f, "DMA error: ")?;
+                        use esp_hal::dma::DmaError::*;
+                        match dma_error {
+                            InvalidAlignment => write!(f, "invalid alignment"),
+                            OutOfDescriptors => write!(f, "out of descriptors"),
+                            DescriptorError => write!(f, "descriptor error"),
+                            Overflow => write!(f, "overflow"),
+                            BufferTooSmall => write!(f, "buffer is too small"),
+                            UnsupportedMemoryRegion => write!(f, "descriptors or buffers are not located in a supported memory region"),
+                            InvalidChunkSize => write!(f, "invalid chunk size"),
+                            Late => write!(f, "writing to or reading from a circular DMA transaction is done too late"),
+                        }
+                    }
+                    MaxDmaTransferSizeExceeded => write!(f, "max DMA transfer size exceeded"),
+                    FifoSizeExeeded => write!(f, "FIFO size was exceeded"),
+                    Unsupported => write!(f, "the operation is unsupported"),
+                    Unknown => write!(f, "unknown error"),
+                }
+            }
         }
     }
 }

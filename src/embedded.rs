@@ -1,4 +1,4 @@
-use crate::{errors::FSError, shared::*};
+use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -308,19 +308,25 @@ struct FireflyIO {
 }
 
 impl FireflyIO {
-    fn transfer(&mut self, req: firefly_types::spi::Request<'_>) -> alloc::vec::Vec<u8> {
+    fn transfer(
+        &mut self,
+        req: firefly_types::spi::Request<'_>,
+    ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
         let mut raw = req.encode_vec().unwrap();
         let spi: &mut IoSpi = Rc::get_mut(&mut self.spi).unwrap();
         let bus = spi.bus_mut();
         // send request
-        bus.transfer(&mut [raw.len() as u8]).unwrap();
-        bus.transfer(&mut raw[..]).unwrap();
+        let Ok(size) = u8::try_from(raw.len()) else {
+            return Err(NetworkError::Error("request payload is too big"));
+        };
+        bus.transfer(&mut [size])?;
+        bus.transfer(&mut raw[..])?;
         // read response
-        bus.transfer(&mut raw[..1]).unwrap();
-        let size = raw[0] as usize;
+        bus.transfer(&mut raw[..1])?;
+        let size = usize::from(raw[0]);
         raw.resize(size, 0);
-        bus.transfer(&mut raw[..]).unwrap();
-        raw
+        bus.transfer(&mut raw[..])?;
+        Ok(raw)
     }
 }
 
@@ -336,7 +342,7 @@ impl<'a> Network for NetworkImpl<'a> {
 
     fn start(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetStart;
-        let resp = self.io.transfer(req);
+        let resp = self.io.transfer(req)?;
         let resp = firefly_types::spi::Response::decode(&resp).unwrap();
         assert_eq!(resp, firefly_types::spi::Response::NetStarted);
         Ok(())
