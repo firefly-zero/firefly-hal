@@ -362,6 +362,12 @@ impl<'a> Network for NetworkImpl<'a> {
     }
 
     fn stop(&mut self) -> NetworkResult<()> {
+        let req = firefly_types::spi::Request::NetStop;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != firefly_types::spi::Response::NetStopped {
+            return Err(NetworkError::UnexpectedResp);
+        }
         Ok(())
     }
 
@@ -370,15 +376,38 @@ impl<'a> Network for NetworkImpl<'a> {
     }
 
     fn advertise(&mut self) -> NetworkResult<()> {
-        todo!()
+        let req = firefly_types::spi::Request::NetAdvertise;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != firefly_types::spi::Response::NetAdvertised {
+            return Err(NetworkError::UnexpectedResp);
+        }
+        Ok(())
     }
 
     fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
-        todo!()
+        let req = firefly_types::spi::Request::NetRecv;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        use firefly_types::spi::Response::*;
+        match resp {
+            NetIncoming(addr, msg) => {
+                let msg = msg.to_vec().into_boxed_slice();
+                Ok(Some((addr, msg)))
+            }
+            NetNoIncoming => Ok(None),
+            _ => Err(NetworkError::UnexpectedResp),
+        }
     }
 
-    fn send(&mut self, _addr: Self::Addr, _data: &[u8]) -> NetworkResult<()> {
-        todo!()
+    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+        let req = firefly_types::spi::Request::NetSend(addr, data);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != firefly_types::spi::Response::NetSent {
+            return Err(NetworkError::UnexpectedResp);
+        }
+        Ok(())
     }
 }
 
