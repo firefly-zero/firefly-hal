@@ -32,24 +32,27 @@ pub struct DeviceImpl<'a> {
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sd_spi: SdSpi, io_spi: IoSpi) -> Result<Self, esp_hal::uart::Error> {
+    pub fn new(sd_spi: SdSpi, io_spi: IoSpi) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
             .open_volume(VolumeIdx(0))
             .unwrap()
             .to_raw_volume();
-        unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
+        let res = unsafe { VOLUME_MANAGER.set(volume_manager) };
+        if res.is_err() {
+            return Err(NetworkError::AlreadyInitialized);
+        }
 
         let mut io = FireflyIO {
             spi: Rc::new(io_spi),
         };
         let req = firefly_types::spi::Request::NetLocalAddr;
-        let raw = io.transfer(req).ok().unwrap();
-        let resp = io.decode(&raw).ok().unwrap();
+        let raw = io.transfer(req)?;
+        let resp = io.decode(&raw)?;
         let addr = match resp {
             firefly_types::spi::Response::NetLocalAddr(addr) => addr,
-            _ => panic!(),
+            _ => return Err(NetworkError::UnexpectedResp),
         };
 
         let device = Self {
