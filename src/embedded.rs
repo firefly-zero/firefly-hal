@@ -2,7 +2,7 @@ use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal::spi::SpiDevice;
-use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
+use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
     VolumeManager,
@@ -13,8 +13,8 @@ use esp_hal::{
 use firefly_types::Encode;
 use fugit::MicrosDurationU64;
 
-type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>;
-type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, NoDelay>;
+type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
+type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
 static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
