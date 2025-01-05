@@ -27,6 +27,7 @@ pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
     io_spi: Rc<IoSpi>,
+    addr: [u8; 6],
     _life: &'a PhantomData<()>,
 }
 
@@ -39,10 +40,23 @@ impl<'a> DeviceImpl<'a> {
             .unwrap()
             .to_raw_volume();
         unsafe { VOLUME_MANAGER.set(volume_manager) }.ok().unwrap();
+
+        let mut io = FireflyIO {
+            spi: Rc::new(io_spi),
+        };
+        let req = firefly_types::spi::Request::NetLocalAddr;
+        let raw = io.transfer(req).ok().unwrap();
+        let resp = io.decode(&raw).ok().unwrap();
+        let addr = match resp {
+            firefly_types::spi::Response::NetLocalAddr(addr) => addr,
+            _ => panic!(),
+        };
+
         let device = Self {
             delay: Delay::new(),
             volume,
-            io_spi: Rc::new(io_spi),
+            io_spi: io.spi,
+            addr,
             _life: &PhantomData,
         };
         Ok(device)
@@ -220,6 +234,7 @@ impl<'a> Device for DeviceImpl<'a> {
             io: FireflyIO {
                 spi: Rc::clone(&self.io_spi),
             },
+            addr: self.addr,
             _life: &PhantomData,
         }
     }
@@ -332,7 +347,7 @@ impl FireflyIO {
         Ok(raw)
     }
 
-    fn decode<'b>(&self, raw: &'b [u8]) -> Result<firefly_types::spi::Response<'b>, NetworkError> {
+    fn decode<'b>(&self, raw: &'b [u8]) -> NetworkResult<firefly_types::spi::Response<'b>> {
         use firefly_types::spi::Response;
         let resp = Response::decode(raw).unwrap();
         if let Response::NetError(err) = resp {
@@ -344,6 +359,7 @@ impl FireflyIO {
 
 pub struct NetworkImpl<'a> {
     io: FireflyIO,
+    addr: [u8; 6],
     _life: &'a PhantomData<()>,
 }
 
@@ -373,7 +389,7 @@ impl<'a> Network for NetworkImpl<'a> {
     }
 
     fn local_addr(&self) -> Self::Addr {
-        todo!()
+        self.addr
     }
 
     fn advertise(&mut self) -> NetworkResult<()> {
