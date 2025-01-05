@@ -27,7 +27,7 @@ pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
     io_spi: Rc<IoSpi>,
-    addr: [u8; 6],
+    addr: Addr,
     _life: &'a PhantomData<()>,
 }
 
@@ -134,7 +134,26 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn read_input(&mut self) -> Option<InputState> {
-        None
+        use firefly_types::spi::*;
+        let mut io = FireflyIO {
+            spi: Rc::clone(&self.io_spi),
+        };
+        let req = Request::ReadInput;
+        let Ok(raw) = io.transfer(req) else {
+            // TODO: here and below, log the error
+            return None;
+        };
+        let Ok(resp) = io.decode(&raw) else {
+            return None;
+        };
+        match resp {
+            Response::Input(pad, buttons) => Some(InputState {
+                pad: pad.map(|(x, y)| Pad { x, y }),
+                buttons,
+            }),
+            // Response::PadError => None,
+            _ => None,
+        }
     }
 
     fn log_debug<D: core::fmt::Display>(&self, src: &str, msg: D) {
@@ -362,14 +381,14 @@ impl FireflyIO {
 
 pub struct NetworkImpl<'a> {
     io: FireflyIO,
-    addr: [u8; 6],
+    addr: Addr,
     _life: &'a PhantomData<()>,
 }
 
 pub type Addr = [u8; 6];
 
 impl<'a> Network for NetworkImpl<'a> {
-    type Addr = [u8; 6];
+    type Addr = Addr;
 
     fn start(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetStart;
