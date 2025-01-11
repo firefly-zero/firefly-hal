@@ -8,12 +8,16 @@ use embedded_sdmmc::{
     VolumeManager,
 };
 use esp_hal::{
-    delay::Delay, gpio::Output, spi::master::Spi, timer::systimer::SystemTimer, Blocking,
+    delay::Delay,
+    gpio::{NoPin, Output},
+    spi::master::Spi,
+    timer::systimer::SystemTimer,
+    Blocking,
 };
 use firefly_types::Encode;
 use fugit::MicrosDurationU64;
 
-type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
+type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, NoPin, Delay>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
