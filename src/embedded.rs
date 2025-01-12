@@ -10,6 +10,7 @@ use embedded_sdmmc::{
 use esp_hal::{
     delay::Delay,
     gpio::{NoPin, Output},
+    rng::Rng,
     spi::master::Spi,
     timer::systimer::SystemTimer,
     Blocking,
@@ -32,11 +33,12 @@ pub struct DeviceImpl<'a> {
     volume: RawVolume,
     io_spi: Rc<IoSpi>,
     addr: Addr,
+    rng: Rng,
     _life: &'a PhantomData<()>,
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sd_spi: SdSpi, io_spi: IoSpi) -> Result<Self, NetworkError> {
+    pub fn new(sd_spi: SdSpi, io_spi: IoSpi, rng: Rng) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
@@ -64,6 +66,7 @@ impl<'a> DeviceImpl<'a> {
             volume,
             io_spi: io.spi,
             addr,
+            rng,
             _life: &PhantomData,
         };
         Ok(device)
@@ -168,6 +171,10 @@ impl<'a> Device for DeviceImpl<'a> {
     fn log_error<D: core::fmt::Display>(&self, src: &str, msg: D) {
         let msg = alloc::format!("ERROR({src}): {msg}");
         self.log(&msg);
+    }
+
+    fn random(&mut self) -> u32 {
+        self.rng.random()
     }
 
     fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {

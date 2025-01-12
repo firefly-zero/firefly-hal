@@ -108,6 +108,10 @@ impl<'a> Device for DeviceImpl<'a> {
         eprintln!("ERROR({src}): {msg}");
     }
 
+    fn random(&mut self) -> u32 {
+        rand::random()
+    }
+
     fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);

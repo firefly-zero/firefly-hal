@@ -106,6 +106,9 @@ pub trait Device {
     /// [defmt]: https://defmt.ferrous-systems.com/introduction
     fn log_error<D: Display>(&self, src: &str, msg: D);
 
+    /// Get a random number.
+    fn random(&mut self) -> u32;
+
     /// Open a file for reading.
     ///
     /// The file path is given as a slice of path components.
