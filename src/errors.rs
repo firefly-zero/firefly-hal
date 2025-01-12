@@ -347,27 +347,6 @@ impl fmt::Display for NetworkError {
     }
 }
 
-impl From<NetworkError> for u32 {
-    fn from(value: NetworkError) -> Self {
-        match value {
-            NetworkError::NotInitialized => 0,
-            NetworkError::AlreadyInitialized => 1,
-            NetworkError::UnknownPeer => 2,
-            NetworkError::CannotBind => 3,
-            NetworkError::PeerListFull => 4,
-            NetworkError::RecvError => 5,
-            NetworkError::SendError => 6,
-            NetworkError::NetThreadDeallocated => 7,
-            NetworkError::OutMessageTooBig => 8,
-            NetworkError::UnexpectedResp => 9,
-            #[cfg(target_os = "none")]
-            NetworkError::Spi(_) => 10,
-            NetworkError::Error(_) => 11,
-            NetworkError::Other(x) => 100 + x,
-        }
-    }
-}
-
 impl From<u32> for NetworkError {
     fn from(value: u32) -> Self {
         match value {
