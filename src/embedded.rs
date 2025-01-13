@@ -375,6 +375,9 @@ impl FireflyIO {
         // read response
         spi.read(&mut raw[..1])?;
         let size = usize::from(raw[0]);
+        if size == 0 {
+            return Err(NetworkError::Error("received zero-sized message"));
+        }
         raw.resize(size, 0);
         spi.read(&mut raw[..])?;
         Ok(raw)
@@ -382,7 +385,10 @@ impl FireflyIO {
 
     fn decode<'b>(&self, raw: &'b [u8]) -> NetworkResult<firefly_types::spi::Response<'b>> {
         use firefly_types::spi::Response;
-        let resp = Response::decode(raw).unwrap();
+        if raw.is_empty() {
+            return Err(NetworkError::Error("buffer is empty, cannot decode"));
+        }
+        let resp = Response::decode(raw)?;
         if let Response::NetError(err) = resp {
             return Err(NetworkError::Other(err));
         }

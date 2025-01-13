@@ -5,6 +5,7 @@ rust-version = "1.82.0"
 edition = "2021"
 
 [dependencies]
+postcard = "1.1.1"
 wasmi = { version = "0.40.0", default-features = false }
 
 # hosted

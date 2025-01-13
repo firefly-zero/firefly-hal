@@ -274,10 +274,17 @@ pub enum NetworkError {
     NetThreadDeallocated,
     OutMessageTooBig,
     UnexpectedResp,
+    Decode(postcard::Error),
     #[cfg(target_os = "none")]
     Spi(esp_hal::spi::Error),
     Error(&'static str),
     Other(u32),
+}
+
+impl From<postcard::Error> for NetworkError {
+    fn from(v: postcard::Error) -> Self {
+        Self::Decode(v)
+    }
 }
 
 #[cfg(target_os = "none")]
@@ -315,6 +322,7 @@ impl fmt::Display for NetworkError {
             NetThreadDeallocated => write!(f, "thread handling networking is already deallocated"),
             OutMessageTooBig => write!(f, "outgoing message is too big"),
             UnexpectedResp => write!(f, "unexpected response"),
+            Decode(err) => write!(f, "decode message: {err}"),
             Error(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
 
