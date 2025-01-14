@@ -277,6 +277,8 @@ pub enum NetworkError {
     Decode(postcard::Error),
     #[cfg(target_os = "none")]
     Spi(esp_hal::spi::Error),
+    #[cfg(target_os = "none")]
+    Uart(esp_hal::uart::Error),
     Error(&'static str),
     Other(u32),
 }
@@ -305,6 +307,13 @@ impl From<embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert:
 impl From<esp_hal::spi::Error> for NetworkError {
     fn from(value: esp_hal::spi::Error) -> Self {
         Self::Spi(value)
+    }
+}
+
+#[cfg(target_os = "none")]
+impl From<esp_hal::uart::Error> for NetworkError {
+    fn from(value: esp_hal::uart::Error) -> Self {
+        Self::Uart(value)
     }
 }
 
@@ -349,6 +358,19 @@ impl fmt::Display for NetworkError {
                     FifoSizeExeeded => write!(f, "FIFO size was exceeded"),
                     Unsupported => write!(f, "the operation is unsupported"),
                     Unknown => write!(f, "unknown error"),
+                }
+            }
+
+            #[cfg(target_os = "none")]
+            Uart(err) => {
+                write!(f, "SPI error: ")?;
+                use esp_hal::uart::Error::*;
+                match err {
+                    InvalidArgument => write!(f, "invalid argument"),
+                    RxFifoOvf => write!(f, "the RX FIFO overflowed"),
+                    RxGlitchDetected => write!(f, "a glitch on the RX line"),
+                    RxFrameError => write!(f, "a framing error on the RX line"),
+                    RxParityError => write!(f, "a parity error on the RX line."),
                 }
             }
         }

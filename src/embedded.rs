@@ -1,24 +1,19 @@
 use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
 use core::{cell::OnceCell, marker::PhantomData, str};
-use embedded_hal::spi::SpiDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
     VolumeManager,
 };
 use esp_hal::{
-    delay::Delay,
-    gpio::{NoPin, Output},
-    rng::Rng,
-    spi::master::Spi,
-    timer::systimer::SystemTimer,
-    Blocking,
+    delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, timer::systimer::SystemTimer,
+    uart::Uart, Blocking,
 };
 use firefly_types::Encode;
 use fugit::MicrosDurationU64;
 
-type IoSpi = ExclusiveDevice<Spi<'static, Blocking>, NoPin, Delay>;
+type IoUart = Uart<'static, Blocking>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
@@ -31,14 +26,14 @@ fn get_volume_manager() -> &'static mut VM {
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
-    io_spi: Rc<IoSpi>,
+    io_uart: Rc<IoUart>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
 }
 
 impl<'a> DeviceImpl<'a> {
-    pub fn new(sd_spi: SdSpi, io_spi: IoSpi, rng: Rng) -> Result<Self, NetworkError> {
+    pub fn new(sd_spi: SdSpi, io_uart: IoUart, rng: Rng) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = volume_manager
@@ -51,7 +46,7 @@ impl<'a> DeviceImpl<'a> {
         }
 
         let mut io = FireflyIO {
-            spi: Rc::new(io_spi),
+            uart: Rc::new(io_uart),
         };
         let req = firefly_types::spi::Request::NetLocalAddr;
         let raw = io.transfer(req)?;
@@ -64,7 +59,7 @@ impl<'a> DeviceImpl<'a> {
         let device = Self {
             delay: Delay::new(),
             volume,
-            io_spi: io.spi,
+            io_uart: io.uart,
             addr,
             rng,
             _life: &PhantomData,
@@ -143,7 +138,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn read_input(&mut self) -> Option<InputState> {
         use firefly_types::spi::*;
         let mut io = FireflyIO {
-            spi: Rc::clone(&self.io_spi),
+            uart: Rc::clone(&self.io_uart),
         };
         let req = Request::ReadInput;
         let Ok(raw) = io.transfer(req) else {
@@ -265,7 +260,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn network(&mut self) -> Self::Network {
         NetworkImpl {
             io: FireflyIO {
-                spi: Rc::clone(&self.io_spi),
+                uart: Rc::clone(&self.io_uart),
             },
             addr: self.addr,
             _life: &PhantomData,
@@ -354,7 +349,7 @@ impl Drop for FileR {
 }
 
 struct FireflyIO {
-    spi: Rc<IoSpi>,
+    uart: Rc<IoUart>,
 }
 
 impl FireflyIO {
@@ -362,24 +357,24 @@ impl FireflyIO {
         &mut self,
         req: firefly_types::spi::Request<'_>,
     ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
-        let spi: &mut IoSpi = Rc::get_mut(&mut self.spi).unwrap();
+        let uart: &mut IoUart = Rc::get_mut(&mut self.uart).unwrap();
 
         // send request
         let mut raw = req.encode_vec().unwrap();
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
-        spi.write(&[size])?;
-        spi.write(&raw[..])?;
+        uart.write_bytes(&[size])?;
+        uart.write_bytes(&raw[..])?;
 
         // read response
-        spi.read(&mut raw[..1])?;
+        uart.read_bytes(&mut raw[..1])?;
         let size = usize::from(raw[0]);
         if size == 0 {
             return Err(NetworkError::Error("received zero-sized message"));
         }
         raw.resize(size, 0);
-        spi.read(&mut raw[..])?;
+        uart.read_bytes(&mut raw[..])?;
         Ok(raw)
     }
 
