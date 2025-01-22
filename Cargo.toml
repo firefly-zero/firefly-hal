@@ -27,11 +27,11 @@ web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
 
 # embedded
 [target.'cfg(target_os = "none")'.dependencies]
-embedded-hal-bus = { version = "0.2.0", default-features = false }
+embedded-hal-bus = { version = "0.3.0", default-features = false }
 embedded-io = { version = "0.6.1", default-features = false }
 embedded-sdmmc = { git = "https://github.com/rust-embedded-community/embedded-sdmmc-rs", default-features = false }
-esp-hal = { version = "0.22.0", features = ["esp32s3"] }
-esp-println = { version = "0.12.0", features = ["esp32s3"] }
-firefly-types = { version = "0.4.0", path = "../firefly-types" }
+esp-hal = { version = "0.23.1", features = ["esp32s3"] }
+esp-println = { version = "0.13.0", features = ["esp32s3"] }
+firefly-types = { version = "0.5.0" }
 fugit = { version = "0.3.7" }
 embedded-hal = { version = "1.0.0" }

@@ -276,8 +276,6 @@ pub enum NetworkError {
     UnexpectedResp,
     Decode(postcard::Error),
     #[cfg(target_os = "none")]
-    Spi(esp_hal::spi::Error),
-    #[cfg(target_os = "none")]
     Uart(esp_hal::uart::Error),
     Error(&'static str),
     OwnedError(alloc::string::String),
@@ -290,26 +288,19 @@ impl From<postcard::Error> for NetworkError {
     }
 }
 
-#[cfg(target_os = "none")]
-impl From<embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>>
-    for NetworkError
-{
-    fn from(
-        value: embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>,
-    ) -> Self {
-        match value {
-            embedded_hal_bus::spi::DeviceError::Spi(err) => Self::Spi(err),
-            embedded_hal_bus::spi::DeviceError::Cs(_) => Self::Error("CS error"),
-        }
-    }
-}
-
-#[cfg(target_os = "none")]
-impl From<esp_hal::spi::Error> for NetworkError {
-    fn from(value: esp_hal::spi::Error) -> Self {
-        Self::Spi(value)
-    }
-}
+// #[cfg(target_os = "none")]
+// impl From<embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>>
+//     for NetworkError
+// {
+//     fn from(
+//         value: embedded_hal_bus::spi::DeviceError<esp_hal::spi::Error, core::convert::Infallible>,
+//     ) -> Self {
+//         match value {
+//             embedded_hal_bus::spi::DeviceError::Spi(err) => Self::Spi(err),
+//             embedded_hal_bus::spi::DeviceError::Cs(_) => Self::Error("CS error"),
+//         }
+//     }
+// }
 
 #[cfg(target_os = "none")]
 impl From<esp_hal::uart::Error> for NetworkError {
@@ -338,41 +329,18 @@ impl fmt::Display for NetworkError {
             Other(n) => write!(f, "network error #{n}"),
 
             #[cfg(target_os = "none")]
-            Spi(err) => {
-                write!(f, "SPI error: ")?;
-                use esp_hal::spi::Error::*;
-                match err {
-                    DmaError(dma_error) => {
-                        write!(f, "DMA error: ")?;
-                        use esp_hal::dma::DmaError::*;
-                        match dma_error {
-                            InvalidAlignment => write!(f, "invalid alignment"),
-                            OutOfDescriptors => write!(f, "out of descriptors"),
-                            DescriptorError => write!(f, "descriptor error"),
-                            Overflow => write!(f, "overflow"),
-                            BufferTooSmall => write!(f, "buffer is too small"),
-                            UnsupportedMemoryRegion => write!(f, "descriptors or buffers are not located in a supported memory region"),
-                            InvalidChunkSize => write!(f, "invalid chunk size"),
-                            Late => write!(f, "writing to or reading from a circular DMA transaction is done too late"),
-                        }
-                    }
-                    MaxDmaTransferSizeExceeded => write!(f, "max DMA transfer size exceeded"),
-                    FifoSizeExeeded => write!(f, "FIFO size was exceeded"),
-                    Unsupported => write!(f, "the operation is unsupported"),
-                    Unknown => write!(f, "unknown error"),
-                }
-            }
-
-            #[cfg(target_os = "none")]
             Uart(err) => {
                 write!(f, "SPI error: ")?;
-                use esp_hal::uart::Error::*;
                 match err {
-                    InvalidArgument => write!(f, "invalid argument"),
-                    RxFifoOvf => write!(f, "the RX FIFO overflowed"),
-                    RxGlitchDetected => write!(f, "a glitch on the RX line"),
-                    RxFrameError => write!(f, "a framing error on the RX line"),
-                    RxParityError => write!(f, "a parity error on the RX line."),
+                    esp_hal::uart::Error::FifoOverflowed => write!(f, "the RX FIFO overflowed"),
+                    esp_hal::uart::Error::GlitchOccurred => write!(f, "a glitch on the RX line"),
+                    esp_hal::uart::Error::FrameFormatViolated => {
+                        write!(f, "a framing error on the RX line")
+                    }
+                    esp_hal::uart::Error::ParityMismatch => {
+                        write!(f, "a parity error on the RX line")
+                    }
+                    _ => write!(f, "unknown error"),
                 }
             }
         }

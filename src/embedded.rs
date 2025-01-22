@@ -32,7 +32,7 @@ pub struct DeviceImpl<'a> {
     _life: &'a PhantomData<()>,
 }
 
-impl<'a> DeviceImpl<'a> {
+impl DeviceImpl<'_> {
     pub fn new(sd_spi: SdSpi, io_uart: IoUart, rng: Rng) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
@@ -122,8 +122,9 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn now(&self) -> Instant {
         debug_assert_eq!(SystemTimer::ticks_per_second(), 16_000_000);
+        let now = esp_hal::time::now();
         Instant {
-            us: (SystemTimer::now() / 16) as u32,
+            us: now.ticks() as u32,
         }
     }
 
@@ -400,7 +401,7 @@ pub struct NetworkImpl<'a> {
 
 pub type Addr = [u8; 6];
 
-impl<'a> Network for NetworkImpl<'a> {
+impl Network for NetworkImpl<'_> {
     type Addr = Addr;
 
     fn start(&mut self) -> NetworkResult<()> {
