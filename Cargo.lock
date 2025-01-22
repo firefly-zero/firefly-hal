@@ -534,9 +534,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-sdmmc"
-version = "0.8.0"
-source = "git+https://github.com/rust-embedded-community/embedded-sdmmc-rs#376035ab936c6043e2a8d7982907a91da997e6cd"
+name = "embedded-sdmmc-dev"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ceec3a654b00a4acf9e2788d72b66fc3ba86d91b834586a4ed576324e351e38b"
 dependencies = [
  "byteorder",
  "embedded-hal 1.0.0",
@@ -762,7 +763,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
  "embedded-io 0.6.1",
- "embedded-sdmmc",
+ "embedded-sdmmc-dev",
  "esp-hal",
  "esp-println",
  "firefly-types",
