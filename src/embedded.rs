@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::{boxed::Box, rc::Rc};
+use alloc::boxed::Box;
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
@@ -26,7 +26,7 @@ fn get_volume_manager() -> &'static mut VM {
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
-    io_uart: Rc<IoUart>,
+    io_uart: Option<IoUart>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -45,9 +45,7 @@ impl<'a> DeviceImpl<'a> {
             return Err(NetworkError::AlreadyInitialized);
         }
 
-        let mut io = FireflyIO {
-            uart: Rc::new(io_uart),
-        };
+        let mut io = FireflyIO { uart: io_uart };
         let req = firefly_types::spi::Request::NetLocalAddr;
         let raw = io.transfer(req)?;
         let resp = io.decode(&raw)?;
@@ -59,7 +57,7 @@ impl<'a> DeviceImpl<'a> {
         let device = Self {
             delay: Delay::new(),
             volume,
-            io_uart: io.uart,
+            io_uart: Some(io.uart),
             addr,
             rng,
             _life: &PhantomData,
@@ -138,20 +136,23 @@ impl<'a> Device for DeviceImpl<'a> {
     fn read_input(&mut self) -> Option<InputState> {
         use firefly_types::spi::*;
         let mut io = FireflyIO {
-            uart: Rc::clone(&self.io_uart),
+            uart: self.io_uart.take().unwrap(),
         };
         let req = Request::ReadInput;
         let Ok(raw) = io.transfer(req) else {
             // TODO: here and below, log the error
+            self.io_uart = Some(io.uart);
             return None;
         };
         let Ok(resp) = io.decode(&raw) else {
+            self.io_uart = Some(io.uart);
             return None;
         };
+        self.io_uart = Some(io.uart);
         match resp {
             Response::Input(pad, buttons) => Some(InputState {
-                pad: pad.map(|(x, y)| Pad { x, y }),
-                buttons,
+                pad: pad.map(|(x, y)| Pad { x, y: -y }),
+                buttons: !buttons,
             }),
             // Response::PadError => None,
             _ => None,
@@ -260,7 +261,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn network(&mut self) -> Self::Network {
         NetworkImpl {
             io: FireflyIO {
-                uart: Rc::clone(&self.io_uart),
+                uart: self.io_uart.take().unwrap(),
             },
             addr: self.addr,
             _life: &PhantomData,
@@ -349,7 +350,7 @@ impl Drop for FileR {
 }
 
 struct FireflyIO {
-    uart: Rc<IoUart>,
+    uart: IoUart,
 }
 
 impl FireflyIO {
@@ -357,7 +358,7 @@ impl FireflyIO {
         &mut self,
         req: firefly_types::spi::Request<'_>,
     ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
-        let uart: &mut IoUart = Rc::get_mut(&mut self.uart).unwrap();
+        let uart = &mut self.uart;
 
         // send request
         let mut raw = req.encode_vec().unwrap();
