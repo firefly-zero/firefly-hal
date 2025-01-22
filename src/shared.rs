@@ -9,7 +9,7 @@ pub const SAMPLE_RATE: u32 = 44_100;
 /// A moment in time. Obtained from [Device::now].
 #[derive(Copy, Clone)]
 pub struct Instant {
-    pub(crate) ns: u32,
+    pub(crate) us: u32,
 }
 
 impl Sub for Instant {
@@ -17,7 +17,7 @@ impl Sub for Instant {
 
     fn sub(self, rhs: Self) -> Duration {
         Duration {
-            ns: self.ns.saturating_sub(rhs.ns),
+            us: self.us.saturating_sub(rhs.us),
         }
     }
 }
@@ -25,23 +25,23 @@ impl Sub for Instant {
 /// Difference between two [Instant]'s. Used by [Device::delay].
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
 pub struct Duration {
-    pub(crate) ns: u32,
+    pub(crate) us: u32,
 }
 
 impl Duration {
     /// Given the desired frames per second, get the duration of a single frame.
     pub fn from_fps(fps: u32) -> Self {
         Self {
-            ns: 1_000_000_000 / fps,
+            us: 1_000_000 / fps,
         }
     }
 
     pub const fn from_ms(ms: u32) -> Self {
-        Self { ns: ms * 1_000_000 }
+        Self { us: ms * 1_000 }
     }
 
     pub fn ns(&self) -> u32 {
-        self.ns
+        self.us * 1000
     }
 }
 
@@ -50,14 +50,14 @@ impl Sub for Duration {
 
     fn sub(self, rhs: Self) -> Self {
         Self {
-            ns: self.ns - rhs.ns,
+            us: self.us - rhs.us,
         }
     }
 }
 
 impl AddAssign for Duration {
     fn add_assign(&mut self, rhs: Self) {
-        self.ns = self.ns.saturating_add(rhs.ns)
+        self.us = self.us.saturating_add(rhs.us)
     }
 }
 

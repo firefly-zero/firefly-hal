@@ -87,12 +87,12 @@ impl<'a> Device for DeviceImpl<'a> {
         let now = std::time::Instant::now();
         let dur = now.duration_since(self.start);
         Instant {
-            ns: dur.as_nanos() as u32,
+            us: dur.as_micros() as u32,
         }
     }
 
     fn delay(&self, d: Duration) {
-        let dur = core::time::Duration::from_nanos(d.ns as u64);
+        let dur = core::time::Duration::from_micros(d.us as u64);
         std::thread::sleep(dur);
     }
 

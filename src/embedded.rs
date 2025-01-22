@@ -123,7 +123,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn now(&self) -> Instant {
         debug_assert_eq!(SystemTimer::ticks_per_second(), 16_000_000);
         Instant {
-            ns: (SystemTimer::now() * 125 / 2) as u32,
+            us: (SystemTimer::now() / 16) as u32,
         }
     }
 
