@@ -280,6 +280,7 @@ pub enum NetworkError {
     #[cfg(target_os = "none")]
     Uart(esp_hal::uart::Error),
     Error(&'static str),
+    OwnedError(alloc::string::String),
     Other(u32),
 }
 
@@ -333,6 +334,7 @@ impl fmt::Display for NetworkError {
             UnexpectedResp => write!(f, "unexpected response"),
             Decode(err) => write!(f, "decode message: {err}"),
             Error(err) => write!(f, "network error: {err}"),
+            OwnedError(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
 
             #[cfg(target_os = "none")]
@@ -373,28 +375,6 @@ impl fmt::Display for NetworkError {
                     RxParityError => write!(f, "a parity error on the RX line."),
                 }
             }
-        }
-    }
-}
-
-impl From<u32> for NetworkError {
-    fn from(value: u32) -> Self {
-        match value {
-            0 => NetworkError::NotInitialized,
-            1 => NetworkError::AlreadyInitialized,
-            2 => NetworkError::UnknownPeer,
-            3 => NetworkError::CannotBind,
-            4 => NetworkError::PeerListFull,
-            5 => NetworkError::RecvError,
-            6 => NetworkError::SendError,
-            7 => NetworkError::NetThreadDeallocated,
-            8 => NetworkError::OutMessageTooBig,
-            9 => NetworkError::UnexpectedResp,
-            #[cfg(target_os = "none")]
-            10 => NetworkError::Spi(esp_hal::spi::Error::Unknown),
-            11 => NetworkError::Error("unknown error"),
-            x if x >= 100 => NetworkError::Other(x - 100),
-            x => NetworkError::Other(x),
         }
     }
 }

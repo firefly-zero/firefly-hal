@@ -385,8 +385,8 @@ impl FireflyIO {
             return Err(NetworkError::Error("buffer is empty, cannot decode"));
         }
         let resp = Response::decode(raw)?;
-        if let Response::NetError(err) = resp {
-            return Err(NetworkError::Other(err));
+        if let Response::Error(err) = resp {
+            return Err(NetworkError::OwnedError(err.into()));
         }
         Ok(resp)
     }
