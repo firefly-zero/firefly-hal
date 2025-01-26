@@ -3,8 +3,8 @@ use alloc::boxed::Box;
 use core::{cell::OnceCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
-    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, VolumeIdx,
-    VolumeManager,
+    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
+    VolumeIdx, VolumeManager,
 };
 use esp_hal::{
     delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, timer::systimer::SystemTimer,
@@ -114,6 +114,30 @@ fn open_dir(manager: &mut VM, dir: RawDirectory, name: &str) -> Result<RawDirect
     Ok(manager.open_dir(dir, short_name)?)
 }
 
+fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFileName, FSError> {
+    match name.to_short_filename() {
+        Ok(short_name) => Ok(short_name),
+        Err(_) => {
+            let mut result = None;
+            let mut buf = [0u8; 64];
+            let mut lfnb = LfnBuffer::new(&mut buf);
+            manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
+                if result.is_some() {
+                    return;
+                }
+                let Some(long_name) = long_name else { return };
+                if long_name.trim_ascii() == name {
+                    result = Some(entry.name.clone())
+                }
+            })?;
+            let Some(file_name) = result else {
+                return Err(FSError::NotFound);
+            };
+            Ok(file_name)
+        }
+    }
+}
+
 impl<'a> Device for DeviceImpl<'a> {
     type Read = FileR;
     type Write = FileW;
@@ -180,7 +204,8 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
+        let file_name = get_short_name(manager, dir, file_name)?;
+        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
         _ = manager.close_dir(dir);
         Ok(FileR { file })
     }
@@ -191,7 +216,8 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteCreate)?;
+        let file_name = get_short_name(manager, dir, file_name)?;
+        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteCreate)?;
         _ = manager.close_dir(dir);
         Ok(FileW { file })
     }
@@ -202,7 +228,8 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadWriteAppend)?;
+        let file_name = get_short_name(manager, dir, file_name)?;
+        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteAppend)?;
         _ = manager.close_dir(dir);
         Ok(FileW { file })
     }
@@ -213,7 +240,8 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        let file = manager.open_file_in_dir(dir, *file_name, Mode::ReadOnly)?;
+        let file_name = get_short_name(manager, dir, file_name)?;
+        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
         let size = manager.file_length(file)?;
         _ = manager.close_file(file);
         _ = manager.close_dir(dir);
@@ -226,7 +254,8 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = get_volume_manager();
-        manager.delete_file_in_dir(dir, *file_name)?;
+        let file_name = get_short_name(manager, dir, file_name)?;
+        manager.delete_file_in_dir(dir, file_name)?;
         _ = manager.close_dir(dir);
         Ok(())
     }
