@@ -1,6 +1,10 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::boxed::Box;
-use core::{cell::OnceCell, marker::PhantomData, str};
+use alloc::{boxed::Box, rc::Rc};
+use core::{
+    cell::{OnceCell, RefCell},
+    marker::PhantomData,
+    str,
+};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
@@ -26,7 +30,7 @@ fn get_volume_manager() -> &'static mut VM {
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
-    io_uart: Option<IoUart>,
+    io_uart: Rc<RefCell<IoUart>>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -45,6 +49,7 @@ impl DeviceImpl<'_> {
             return Err(NetworkError::AlreadyInitialized);
         }
 
+        let io_uart = Rc::new(RefCell::new(io_uart));
         let mut io = FireflyIO { uart: io_uart };
         let req = firefly_types::spi::Request::NetLocalAddr;
         let raw = io.transfer(req)?;
@@ -57,7 +62,7 @@ impl DeviceImpl<'_> {
         let device = Self {
             delay: Delay::new(),
             volume,
-            io_uart: Some(io.uart),
+            io_uart: io.uart,
             addr,
             rng,
             _life: &PhantomData,
@@ -161,19 +166,16 @@ impl<'a> Device for DeviceImpl<'a> {
     fn read_input(&mut self) -> Option<InputState> {
         use firefly_types::spi::*;
         let mut io = FireflyIO {
-            uart: self.io_uart.take().unwrap(),
+            uart: Rc::clone(&self.io_uart),
         };
         let req = Request::ReadInput;
         let Ok(raw) = io.transfer(req) else {
             // TODO: here and below, log the error
-            self.io_uart = Some(io.uart);
             return None;
         };
         let Ok(resp) = io.decode(&raw) else {
-            self.io_uart = Some(io.uart);
             return None;
         };
-        self.io_uart = Some(io.uart);
         match resp {
             Response::Input(pad, buttons) => Some(InputState {
                 pad: pad.map(|(x, y)| Pad { x, y: -y }),
@@ -291,7 +293,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn network(&mut self) -> Self::Network {
         NetworkImpl {
             io: FireflyIO {
-                uart: self.io_uart.take().unwrap(),
+                uart: Rc::clone(&self.io_uart),
             },
             addr: self.addr,
             _life: &PhantomData,
@@ -380,7 +382,7 @@ impl Drop for FileR {
 }
 
 struct FireflyIO {
-    uart: IoUart,
+    uart: Rc<RefCell<IoUart>>,
 }
 
 impl FireflyIO {
@@ -388,7 +390,7 @@ impl FireflyIO {
         &mut self,
         req: firefly_types::spi::Request<'_>,
     ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
-        let uart = &mut self.uart;
+        let mut uart = self.uart.borrow_mut();
 
         // send request
         let mut raw = req.encode_vec().unwrap();
