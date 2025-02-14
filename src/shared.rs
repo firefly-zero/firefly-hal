@@ -9,7 +9,7 @@ pub const SAMPLE_RATE: u32 = 44_100;
 /// A moment in time. Obtained from [Device::now].
 #[derive(Copy, Clone)]
 pub struct Instant {
-    pub(crate) us: u32,
+    pub us: u32,
 }
 
 impl Sub for Instant {
@@ -38,6 +38,10 @@ impl Duration {
 
     pub const fn from_ms(ms: u32) -> Self {
         Self { us: ms * 1_000 }
+    }
+
+    pub const fn from_us(us: u32) -> Self {
+        Self { us }
     }
 
     pub fn ns(&self) -> u32 {

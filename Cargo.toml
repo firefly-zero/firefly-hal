@@ -32,10 +32,9 @@ embedded-io = { version = "0.6.1", default-features = false }
 # A temporary fork of the latest dev version of embedded-sdmmc.
 # We'll switch to upstream when they push to crate the version >0.8.1.
 embedded_sdmmc = { version = "0.8.2", default-features = false, package = "embedded-sdmmc-dev" }
-esp-hal = { version = "0.23.1", path = "/home/gram/gh/esp-hal/esp-hal", features = [
+esp-hal = { version = "0.23.1", git = "https://github.com/esp-rs/esp-hal.git", features = [
     "esp32s3",
 ] }
 esp-println = { version = "0.13.0", features = ["esp32s3"] }
 firefly-types = { version = "0.5.0" }
-fugit = { version = "0.3.7" }
 embedded-hal = { version = "1.0.0" }

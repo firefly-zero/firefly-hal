@@ -15,7 +15,6 @@ use esp_hal::{
     uart::Uart, Blocking,
 };
 use firefly_types::Encode;
-use fugit::MicrosDurationU64;
 
 type IoUart = Uart<'static, Blocking>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
@@ -151,15 +150,15 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn now(&self) -> Instant {
         debug_assert_eq!(SystemTimer::ticks_per_second(), 16_000_000);
-        let now = esp_hal::time::now();
+        let now = esp_hal::time::Instant::now();
         Instant {
-            us: now.ticks() as u32,
+            us: now.duration_since_epoch().as_micros() as u32,
         }
     }
 
     fn delay(&self, d: Duration) {
         let d_micros = d.ns() / 1_000;
-        let d = MicrosDurationU64::from_ticks(d_micros as u64);
+        let d = esp_hal::time::Duration::from_micros(d_micros as u64);
         self.delay.delay(d);
     }
 
