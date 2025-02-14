@@ -31,10 +31,10 @@ impl DeviceImpl<'_> {
     pub fn new(sd_spi: SdSpi, io_uart: IoUart, rng: Rng) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
-        let volume = volume_manager
-            .open_volume(VolumeIdx(0))
-            .unwrap()
-            .to_raw_volume();
+        let Ok(volume) = volume_manager.open_volume(VolumeIdx(0)) else {
+            return Err(NetworkError::Error("failed to open SD card volume 0"));
+        };
+        let volume = volume.to_raw_volume();
 
         let io_uart = Rc::new(RefCell::new(io_uart));
         let mut io = FireflyIO { uart: io_uart };
@@ -83,52 +83,30 @@ impl DeviceImpl<'_> {
 /// Otherwise, iterate through all items in the directory, find an entry
 /// with the given long name, get its short name, and use that to open the directory.
 fn open_dir(manager: &mut VM, dir: RawDirectory, name: &str) -> Result<RawDirectory, FSError> {
-    let short_name = match name.to_short_filename() {
-        Ok(short_name) => short_name,
-        Err(_) => {
-            let mut result = None;
-            let mut buf = [0u8; 64];
-            let mut lfnb = LfnBuffer::new(&mut buf);
-            manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
-                if result.is_some() {
-                    return;
-                }
-                let Some(long_name) = long_name else { return };
-                if long_name.trim_ascii() == name {
-                    result = Some(entry.name.clone())
-                }
-            })?;
-            let Some(dir) = result else {
-                return Err(FSError::NotFound);
-            };
-            dir
-        }
-    };
+    let short_name = get_short_name(manager, dir, name)?;
     Ok(manager.open_dir(dir, short_name)?)
 }
 
 fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFileName, FSError> {
-    match name.to_short_filename() {
-        Ok(short_name) => Ok(short_name),
-        Err(_) => {
-            let mut result = None;
-            let mut buf = [0u8; 64];
-            let mut lfnb = LfnBuffer::new(&mut buf);
-            manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
-                if result.is_some() {
-                    return;
-                }
-                let Some(long_name) = long_name else { return };
-                if long_name.trim_ascii() == name {
-                    result = Some(entry.name.clone())
-                }
-            })?;
-            let Some(file_name) = result else {
-                return Err(FSError::NotFound);
-            };
-            Ok(file_name)
-        }
+    if let Ok(short_name) = name.to_short_filename() {
+        return Ok(short_name);
     }
+    let mut result = None;
+    let mut buf = [0u8; 64];
+    let mut lfnb = LfnBuffer::new(&mut buf);
+    manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
+        if result.is_some() {
+            return;
+        }
+        let Some(long_name) = long_name else { return };
+        if long_name.trim_ascii() == name {
+            result = Some(entry.name.clone())
+        }
+    })?;
+    let Some(file_name) = result else {
+        return Err(FSError::NotFound);
+    };
+    Ok(file_name)
 }
 
 impl<'a> Device for DeviceImpl<'a> {
@@ -392,7 +370,7 @@ impl FireflyIO {
         let mut uart = self.uart.borrow_mut();
 
         // send request
-        let mut raw = req.encode_vec().unwrap();
+        let mut raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
