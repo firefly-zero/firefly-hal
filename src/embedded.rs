@@ -1,10 +1,6 @@
 use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
-use core::{
-    cell::{OnceCell, RefCell},
-    marker::PhantomData,
-    str,
-};
+use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
@@ -20,15 +16,11 @@ type IoUart = Uart<'static, Blocking>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
-static mut VOLUME_MANAGER: OnceCell<VM> = OnceCell::new();
-
-fn get_volume_manager() -> &'static mut VM {
-    unsafe { VOLUME_MANAGER.get_mut() }.unwrap()
-}
 
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
+    vm: Rc<RefCell<VM>>,
     io_uart: Rc<RefCell<IoUart>>,
     addr: Addr,
     rng: Rng,
@@ -43,10 +35,6 @@ impl DeviceImpl<'_> {
             .open_volume(VolumeIdx(0))
             .unwrap()
             .to_raw_volume();
-        let res = unsafe { VOLUME_MANAGER.set(volume_manager) };
-        if res.is_err() {
-            return Err(NetworkError::AlreadyInitialized);
-        }
 
         let io_uart = Rc::new(RefCell::new(io_uart));
         let mut io = FireflyIO { uart: io_uart };
@@ -61,6 +49,7 @@ impl DeviceImpl<'_> {
         let device = Self {
             delay: Delay::new(),
             volume,
+            vm: Rc::new(RefCell::new(volume_manager)),
             io_uart: io.uart,
             addr,
             rng,
@@ -77,11 +66,11 @@ impl DeviceImpl<'_> {
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
-        let manager = get_volume_manager();
+        let mut manager = self.vm.borrow_mut();
         let mut dir = manager.open_root_dir(self.volume)?;
         for part in path {
             let parent_dir = dir;
-            dir = open_dir(manager, dir, part)?;
+            dir = open_dir(&mut manager, dir, part)?;
             _ = manager.close_dir(parent_dir);
         }
         Ok(dir)
@@ -204,11 +193,14 @@ impl<'a> Device for DeviceImpl<'a> {
             return Err(FSError::OpenedDirAsFile);
         };
         let dir = self.get_dir(dir_path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let file_name = get_short_name(manager, dir, file_name)?;
         let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
         _ = manager.close_dir(dir);
-        Ok(FileR { file })
+        Ok(FileR {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
     }
 
     fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
@@ -216,11 +208,14 @@ impl<'a> Device for DeviceImpl<'a> {
             return Err(FSError::OpenedDirAsFile);
         };
         let dir = self.get_dir(dir_path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let file_name = get_short_name(manager, dir, file_name)?;
         let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteCreate)?;
         _ = manager.close_dir(dir);
-        Ok(FileW { file })
+        Ok(FileW {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
     }
 
     fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
@@ -228,11 +223,14 @@ impl<'a> Device for DeviceImpl<'a> {
             return Err(FSError::OpenedDirAsFile);
         };
         let dir = self.get_dir(dir_path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let file_name = get_short_name(manager, dir, file_name)?;
         let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteAppend)?;
         _ = manager.close_dir(dir);
-        Ok(FileW { file })
+        Ok(FileW {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
     }
 
     fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
@@ -240,7 +238,7 @@ impl<'a> Device for DeviceImpl<'a> {
             return Err(FSError::OpenedDirAsFile);
         };
         let dir = self.get_dir(dir_path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let file_name = get_short_name(manager, dir, file_name)?;
         let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
         let size = manager.file_length(file)?;
@@ -254,7 +252,7 @@ impl<'a> Device for DeviceImpl<'a> {
             return Err(FSError::OpenedDirAsFile);
         };
         let dir = self.get_dir(dir_path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let file_name = get_short_name(manager, dir, file_name)?;
         manager.delete_file_in_dir(dir, file_name)?;
         _ = manager.close_dir(dir);
@@ -266,7 +264,7 @@ impl<'a> Device for DeviceImpl<'a> {
         F: FnMut(crate::EntryKind, &[u8]),
     {
         let dir = self.get_dir(path)?;
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         let mut buf = [0u8; 64];
         let mut lfnb = LfnBuffer::new(&mut buf);
         manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
@@ -313,6 +311,7 @@ impl<'a> Device for DeviceImpl<'a> {
 }
 
 pub struct FileW {
+    vm: Rc<RefCell<VM>>,
     file: embedded_sdmmc::RawFile,
 }
 
@@ -322,7 +321,7 @@ impl embedded_io::ErrorType for FileW {
 
 impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         match manager.write(self.file, buf) {
             Ok(()) => Ok(buf.len()),
             Err(_) => Err(embedded_io::ErrorKind::Other),
@@ -330,7 +329,7 @@ impl embedded_io::Write for FileW {
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         match manager.flush_file(self.file) {
             Ok(()) => Ok(()),
             Err(_) => Err(embedded_io::ErrorKind::Other),
@@ -340,12 +339,13 @@ impl embedded_io::Write for FileW {
 
 impl Drop for FileW {
     fn drop(&mut self) {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         _ = manager.close_file(self.file);
     }
 }
 
 pub struct FileR {
+    vm: Rc<RefCell<VM>>,
     file: embedded_sdmmc::RawFile,
 }
 
@@ -355,7 +355,7 @@ impl embedded_io::ErrorType for FileR {
 
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         match manager.read(self.file, buf) {
             Ok(size) => Ok(size),
             Err(_) => Err(embedded_io::ErrorKind::Other),
@@ -365,7 +365,7 @@ impl embedded_io::Read for FileR {
 
 impl wasmi::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         match manager.read(self.file, buf) {
             Ok(size) => Ok(size),
             Err(_) => Err(wasmi::errors::ReadError::UnknownError),
@@ -375,7 +375,7 @@ impl wasmi::Read for FileR {
 
 impl Drop for FileR {
     fn drop(&mut self) {
-        let manager = get_volume_manager();
+        let manager = &self.vm.borrow();
         _ = manager.close_file(self.file);
     }
 }
