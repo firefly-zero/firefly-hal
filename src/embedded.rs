@@ -6,10 +6,7 @@ use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
     VolumeIdx, VolumeManager,
 };
-use esp_hal::{
-    delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, timer::systimer::SystemTimer,
-    uart::Uart, Blocking,
-};
+use esp_hal::{delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart, Blocking};
 use firefly_types::Encode;
 
 type IoUart = Uart<'static, Blocking>;
@@ -116,7 +113,6 @@ impl<'a> Device for DeviceImpl<'a> {
     type Serial = SerialImpl;
 
     fn now(&self) -> Instant {
-        debug_assert_eq!(SystemTimer::ticks_per_second(), 16_000_000);
         let now = esp_hal::time::Instant::now();
         Instant {
             us: now.duration_since_epoch().as_micros() as u32,

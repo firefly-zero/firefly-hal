@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 postcard = "1.1.1"
-wasmi = { version = "0.40.0", default-features = false }
+wasmi = { version = "0.42.1", default-features = false }
 
 # hosted
 [target.'cfg(not(target_os = "none"))'.dependencies]
