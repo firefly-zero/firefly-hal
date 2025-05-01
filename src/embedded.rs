@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::{boxed::Box, rc::Rc};
+use alloc::{boxed::Box, collections::linked_list::LinkedList, rc::Rc};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Write;
@@ -30,7 +30,7 @@ pub struct DeviceImpl<'a> {
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
     io_uart: Rc<RefCell<IoUart>>,
-    usb_serial: RefCell<UsbSerial>,
+    usb_serial: Rc<RefCell<UsbSerial>>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -40,7 +40,7 @@ impl DeviceImpl<'_> {
     pub fn new(
         sd_spi: SdSpi,
         io_uart: IoUart,
-        usb_serial: UsbSerial,
+        usb_serial: Rc<RefCell<UsbSerial>>,
         rng: Rng,
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
@@ -65,7 +65,7 @@ impl DeviceImpl<'_> {
             volume,
             vm: Rc::new(RefCell::new(volume_manager)),
             io_uart: io.uart,
-            usb_serial: RefCell::new(usb_serial),
+            usb_serial,
             addr,
             rng,
             _life: &PhantomData,
@@ -76,7 +76,26 @@ impl DeviceImpl<'_> {
     fn log(&self, msg: &str) {
         // esp_println::println!("{msg}");
         let mut usb_serial = self.usb_serial.borrow_mut();
-        usb_serial.write_all(msg.as_bytes()).unwrap();
+
+        let buf = &mut [0];
+        loop {
+            match usb_serial.read(buf) {
+                Ok(count) if count > 0 => break,
+                _ => {}
+            }
+        }
+
+        let buf = msg.as_bytes();
+        let count = buf.len();
+        let mut write_offset = 0;
+        while write_offset < count {
+            match usb_serial.write(&buf[write_offset..count]) {
+                Ok(len) if len > 0 => {
+                    write_offset += len;
+                }
+                _ => {}
+            }
+        }
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
