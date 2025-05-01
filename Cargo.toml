@@ -35,6 +35,7 @@ embedded_sdmmc = { version = "0.8.2", default-features = false, package = "embed
 esp-hal = { version = "0.23.1", git = "https://github.com/esp-rs/esp-hal.git", features = [
     "esp32s3",
 ] }
-esp-println = { version = "0.13.1", features = ["esp32s3"] }
+# esp-println = { version = "0.13.1", features = ["esp32s3"] }
 firefly-types = { version = "0.5.0" }
 embedded-hal = { version = "1.0.0" }
+usbd-serial = "0.2.2"

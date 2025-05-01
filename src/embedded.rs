@@ -2,14 +2,25 @@ use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_io::Write;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
     VolumeIdx, VolumeManager,
 };
-use esp_hal::{delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart, Blocking};
+use esp_hal::{
+    delay::Delay,
+    gpio::Output,
+    otg_fs::{Usb, UsbBus},
+    rng::Rng,
+    spi::master::Spi,
+    uart::Uart,
+    Blocking,
+};
 use firefly_types::Encode;
+use usbd_serial::SerialPort;
 
 type IoUart = Uart<'static, Blocking>;
+type UsbSerial = SerialPort<'static, UsbBus<Usb<'static>>>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
@@ -19,13 +30,19 @@ pub struct DeviceImpl<'a> {
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
     io_uart: Rc<RefCell<IoUart>>,
+    usb_serial: RefCell<UsbSerial>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
 }
 
 impl DeviceImpl<'_> {
-    pub fn new(sd_spi: SdSpi, io_uart: IoUart, rng: Rng) -> Result<Self, NetworkError> {
+    pub fn new(
+        sd_spi: SdSpi,
+        io_uart: IoUart,
+        usb_serial: UsbSerial,
+        rng: Rng,
+    ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let Ok(volume) = volume_manager.open_volume(VolumeIdx(0)) else {
@@ -48,6 +65,7 @@ impl DeviceImpl<'_> {
             volume,
             vm: Rc::new(RefCell::new(volume_manager)),
             io_uart: io.uart,
+            usb_serial: RefCell::new(usb_serial),
             addr,
             rng,
             _life: &PhantomData,
@@ -56,10 +74,9 @@ impl DeviceImpl<'_> {
     }
 
     fn log(&self, msg: &str) {
-        esp_println::println!("{msg}");
-        // let mut uart = self.uart.replace(None);
-        // _ = uart.as_mut().unwrap().write_bytes(msg.as_bytes());
-        // self.uart.replace(uart);
+        // esp_println::println!("{msg}");
+        let mut usb_serial = self.usb_serial.borrow_mut();
+        usb_serial.write_all(msg.as_bytes()).unwrap();
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
