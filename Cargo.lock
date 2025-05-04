@@ -592,6 +592,17 @@ checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 [[package]]
 name = "esp-build"
 version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8aa1c8f9954c9506699cf1ca10a2adcc226ff10b6ae3cb9e875cf2c6a0b9a372"
+dependencies = [
+ "quote",
+ "syn",
+ "termcolor",
+]
+
+[[package]]
+name = "esp-build"
+version = "0.2.0"
 source = "git+https://github.com/esp-rs/esp-hal.git#0138d462b79afef806eb7788f62ca0728a097511"
 dependencies = [
  "quote",
@@ -632,7 +643,7 @@ dependencies = [
  "embedded-io 0.6.1",
  "embedded-io-async",
  "enumset",
- "esp-build",
+ "esp-build 0.2.0 (git+https://github.com/esp-rs/esp-hal.git)",
  "esp-config",
  "esp-hal-procmacros",
  "esp-metadata",
@@ -680,6 +691,16 @@ dependencies = [
  "basic-toml",
  "serde",
  "strum",
+]
+
+[[package]]
+name = "esp-println"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "960703930f9f3c899ddedd122ea27a09d6a612c22323157e524af5b18876448e"
+dependencies = [
+ "esp-build 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log",
 ]
 
 [[package]]
@@ -735,6 +756,7 @@ dependencies = [
  "embedded-io 0.6.1",
  "embedded-sdmmc-dev",
  "esp-hal",
+ "esp-println",
  "firefly-types",
  "gilrs",
  "hound",
@@ -742,6 +764,7 @@ dependencies = [
  "rand",
  "rodio",
  "rust-embed",
+ "usb-device",
  "usbd-serial",
  "vfs",
  "wasm-bindgen",
