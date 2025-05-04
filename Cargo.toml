@@ -38,9 +38,3 @@ esp-hal = { version = "0.23.1", git = "https://github.com/esp-rs/esp-hal.git", f
 # esp-println = { version = "0.13.1", features = ["esp32s3"] }
 firefly-types = { version = "0.5.0" }
 embedded-hal = { version = "1.0.0" }
-usbd-serial = "0.2.2"
-usb-device = "0.3.2"
-esp-println = { version = "0.13.0", features = [
-    "esp32s3",
-    "uart",
-], default-features = false }

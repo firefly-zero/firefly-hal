@@ -1,28 +1,18 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::{borrow::ToOwned, boxed::Box, collections::VecDeque, rc::Rc};
+use alloc::{boxed::Box, rc::Rc};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embedded_io::Write;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
     VolumeIdx, VolumeManager,
 };
 use esp_hal::{
-    delay::Delay,
-    gpio::Output,
-    otg_fs::{Usb, UsbBus},
-    rng::Rng,
-    spi::master::Spi,
-    uart::Uart,
-    Blocking,
+    delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
+    usb_serial_jtag::UsbSerialJtag, Blocking,
 };
 use firefly_types::Encode;
-use usb_device::device::UsbDevice;
-use usbd_serial::SerialPort;
 
 type IoUart = Uart<'static, Blocking>;
-type UsbSerial = SerialPort<'static, UsbBus<Usb<'static>>>;
-type UsbDev = UsbDevice<'static, UsbBus<Usb<'static>>>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
@@ -32,7 +22,7 @@ pub struct DeviceImpl<'a> {
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
     io_uart: Rc<RefCell<IoUart>>,
-    usb: RefCell<UsbManager>,
+    usb_serial: RefCell<UsbSerialJtag<'a, Blocking>>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -42,8 +32,7 @@ impl DeviceImpl<'_> {
     pub fn new(
         sd_spi: SdSpi,
         io_uart: IoUart,
-        usb_device: UsbDev,
-        usb_serial: UsbSerial,
+        usb_serial: UsbSerialJtag<'static, Blocking>,
         rng: Rng,
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
@@ -68,7 +57,7 @@ impl DeviceImpl<'_> {
             volume,
             vm: Rc::new(RefCell::new(volume_manager)),
             io_uart: io.uart,
-            usb: RefCell::new(UsbManager::new(usb_device, usb_serial)),
+            usb_serial: RefCell::new(usb_serial),
             addr,
             rng,
             _life: &PhantomData,
@@ -77,10 +66,9 @@ impl DeviceImpl<'_> {
     }
 
     fn log(&self, msg: &str) {
-        esp_println::println!("{msg}");
-        // let b = msg.as_bytes().to_owned();
-        // let mut usb = self.usb.borrow_mut();
-        // usb.write(b.into_boxed_slice());
+        let b = msg.as_bytes();
+        let mut usb = self.usb_serial.borrow_mut();
+        _ = usb.write_bytes(b);
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
@@ -506,73 +494,6 @@ impl Serial for SerialImpl {
 
     fn send(&mut self, _data: &[u8]) -> NetworkResult<()> {
         Ok(())
-    }
-}
-
-/// Manages serial USB connection and inbox/outbox buffering.
-struct UsbManager {
-    dev: UsbDev,
-    serial: UsbSerial,
-    outbox: VecDeque<Box<[u8]>>,
-    inbox: VecDeque<Box<[u8]>>,
-}
-
-impl UsbManager {
-    fn new(dev: UsbDev, serial: UsbSerial) -> Self {
-        Self {
-            dev,
-            serial,
-            outbox: VecDeque::new(),
-            inbox: VecDeque::new(),
-        }
-    }
-
-    fn write(&mut self, b: Box<[u8]>) {
-        if self.outbox.len() > 16 {
-            self.outbox.pop_front();
-        }
-        self.outbox.push_back(b);
-        // self.sync();
-    }
-
-    fn read(&mut self) -> Option<Box<[u8]>> {
-        self.inbox.pop_front()
-    }
-
-    fn sync(&mut self) {
-        if !self.dev.poll(&mut [&mut self.serial]) {
-            return;
-        }
-
-        let mut buf = [0u8; 64];
-        match self.serial.read(&mut buf) {
-            Ok(count) if count > 0 => {
-                let is_ping = count == 1 && buf[0] == b'?';
-                if !is_ping {
-                    if self.inbox.len() > 16 {
-                        self.inbox.pop_front();
-                    }
-                    let v = alloc::vec::Vec::from(&buf[..count]);
-                    self.inbox.push_back(v.into_boxed_slice());
-                }
-            }
-            _ => {
-                return;
-            }
-        }
-
-        if let Some(buf) = self.outbox.pop_front() {
-            let count = buf.len();
-            let mut write_offset = 0;
-            while write_offset < count {
-                match self.serial.write(&buf[write_offset..count]) {
-                    Ok(len) if len > 0 => {
-                        write_offset += len;
-                    }
-                    _ => {}
-                }
-            }
-        }
     }
 }
 
