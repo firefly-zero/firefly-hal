@@ -22,7 +22,7 @@ pub struct DeviceImpl<'a> {
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
     io_uart: Rc<RefCell<IoUart>>,
-    usb_serial: RefCell<UsbSerialJtag<'a, Blocking>>,
+    usb_serial: Rc<RefCell<UsbSerialJtag<'static, Blocking>>>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -57,7 +57,7 @@ impl DeviceImpl<'_> {
             volume,
             vm: Rc::new(RefCell::new(volume_manager)),
             io_uart: io.uart,
-            usb_serial: RefCell::new(usb_serial),
+            usb_serial: Rc::new(RefCell::new(usb_serial)),
             addr,
             rng,
             _life: &PhantomData,
@@ -294,7 +294,9 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn serial(&self) -> Self::Serial {
-        SerialImpl {}
+        SerialImpl {
+            usb_serial: Rc::clone(&self.usb_serial),
+        }
     }
 
     fn has_headphones(&mut self) -> bool {
@@ -490,7 +492,9 @@ impl Network for NetworkImpl<'_> {
     }
 }
 
-pub struct SerialImpl {}
+pub struct SerialImpl {
+    usb_serial: Rc<RefCell<UsbSerialJtag<'static, Blocking>>>,
+}
 
 impl Serial for SerialImpl {
     fn start(&mut self) -> NetworkResult<()> {
@@ -502,10 +506,29 @@ impl Serial for SerialImpl {
     }
 
     fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
-        Ok(None)
+        let mut usb = self.usb_serial.borrow_mut();
+        let mut buf = alloc::vec::Vec::new();
+        while let Ok(byte) = usb.read_byte() {
+            buf.push(byte);
+        }
+        if buf.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(buf.into_boxed_slice()))
     }
 
-    fn send(&mut self, _data: &[u8]) -> NetworkResult<()> {
+    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        let mut usb = self.usb_serial.borrow_mut();
+        // Non-blocking writes ensure that we won't block forever
+        // if there is no client connected listening for messages.
+        // However, that also means we might lose some messages
+        // even if there is a client connected
+        // (if the runtime writes faster than the client reads).
+        for byte in data {
+            _ = usb.write_byte_nb(*byte);
+        }
+        _ = usb.write_byte_nb(0x00);
+        _ = usb.flush_tx_nb();
         Ok(())
     }
 }
