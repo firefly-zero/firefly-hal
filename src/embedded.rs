@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::{boxed::Box, rc::Rc};
+use alloc::{boxed::Box, rc::Rc, string::ToString};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
@@ -66,9 +66,15 @@ impl DeviceImpl<'_> {
     }
 
     fn log(&self, msg: &str) {
-        let b = msg.as_bytes();
+        let msg = firefly_types::serial::Response::Log(msg.to_string());
+        let raw = msg.encode_vec().unwrap();
+        let n = cobs::max_encoding_length(raw.len());
+        let mut buf = alloc::vec![0; n];
+        cobs::encode(&raw, &mut buf);
         let mut usb = self.usb_serial.borrow_mut();
-        _ = usb.write_bytes(b);
+        _ = usb.write_bytes(&buf);
+        _ = usb.write_byte_nb(0x00);
+        _ = usb.flush_tx_nb();
     }
 
     fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
