@@ -518,14 +518,18 @@ impl Serial for SerialImpl {
     }
 
     fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        let n = cobs::max_encoding_length(data.len());
+        let mut buf = alloc::vec![0; n];
+        cobs::encode(data, &mut buf);
+
         let mut usb = self.usb_serial.borrow_mut();
         // Non-blocking writes ensure that we won't block forever
         // if there is no client connected listening for messages.
         // However, that also means we might lose some messages
         // even if there is a client connected
         // (if the runtime writes faster than the client reads).
-        for byte in data {
-            _ = usb.write_byte_nb(*byte);
+        for byte in buf {
+            _ = usb.write_byte_nb(byte);
         }
         _ = usb.write_byte_nb(0x00);
         _ = usb.flush_tx_nb();
