@@ -3,8 +3,8 @@ use alloc::{boxed::Box, rc::Rc, string::ToString};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_sdmmc::{
-    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawVolume, SdCard, ShortFileName,
-    VolumeIdx, VolumeManager,
+    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard,
+    ShortFileName, VolumeIdx, VolumeManager,
 };
 use esp_hal::{
     delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
@@ -76,9 +76,9 @@ impl DeviceImpl<'_> {
         let mut manager = self.vm.borrow_mut();
         let mut dir = manager.open_root_dir(self.volume)?;
         for part in path {
-            let parent_dir = dir;
-            dir = open_dir(&mut manager, dir, part)?;
-            _ = manager.close_dir(parent_dir);
+            let open_res = open_dir(&mut manager, dir, part);
+            _ = manager.close_dir(dir);
+            dir = open_res?;
         }
         Ok(dir)
     }
@@ -114,6 +114,26 @@ fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFi
         return Err(FSError::NotFound);
     };
     Ok(file_name)
+}
+
+/// Open a file in a dir and close the dir. Long file names are supported.
+fn open_file(
+    manager: &VM,
+    dir: RawDirectory,
+    file_name: &str,
+    mode: Mode,
+) -> Result<RawFile, FSError> {
+    let short_name = match get_short_name(manager, dir, file_name) {
+        Ok(short_name) => short_name,
+        Err(err) => {
+            _ = manager.close_dir(dir);
+            return Err(err);
+        }
+    };
+    let res = manager.open_file_in_dir(dir, short_name, mode);
+    _ = manager.close_dir(dir);
+    let file = res?;
+    Ok(file)
 }
 
 impl<'a> Device for DeviceImpl<'a> {
@@ -178,9 +198,7 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file_name = get_short_name(manager, dir, file_name)?;
-        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
-        _ = manager.close_dir(dir);
+        let file = open_file(manager, dir, file_name, Mode::ReadOnly)?;
         Ok(FileR {
             vm: Rc::clone(&self.vm),
             file,
@@ -193,9 +211,7 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file_name = get_short_name(manager, dir, file_name)?;
-        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteCreate)?;
-        _ = manager.close_dir(dir);
+        let file = open_file(manager, dir, file_name, Mode::ReadWriteCreate)?;
         Ok(FileW {
             vm: Rc::clone(&self.vm),
             file,
@@ -208,9 +224,7 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file_name = get_short_name(manager, dir, file_name)?;
-        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadWriteAppend)?;
-        _ = manager.close_dir(dir);
+        let file = open_file(manager, dir, file_name, Mode::ReadWriteAppend)?;
         Ok(FileW {
             vm: Rc::clone(&self.vm),
             file,
@@ -223,11 +237,9 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file_name = get_short_name(manager, dir, file_name)?;
-        let file = manager.open_file_in_dir(dir, file_name, Mode::ReadOnly)?;
+        let file = open_file(manager, dir, file_name, Mode::ReadOnly)?;
         let size = manager.file_length(file)?;
         _ = manager.close_file(file);
-        _ = manager.close_dir(dir);
         Ok(size)
     }
 
@@ -237,9 +249,16 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file_name = get_short_name(manager, dir, file_name)?;
-        manager.delete_file_in_dir(dir, file_name)?;
+        let short_name = match get_short_name(manager, dir, file_name) {
+            Ok(short_name) => short_name,
+            Err(err) => {
+                _ = manager.close_dir(dir);
+                return Err(err);
+            }
+        };
+        let res = manager.delete_file_in_dir(dir, short_name);
         _ = manager.close_dir(dir);
+        res?;
         Ok(())
     }
 

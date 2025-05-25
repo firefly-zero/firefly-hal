@@ -3,6 +3,7 @@ use alloc::boxed::Box;
 use core::fmt::Display;
 use core::ops::AddAssign;
 use core::ops::Sub;
+use core::ops::SubAssign;
 
 pub const SAMPLE_RATE: u32 = 44_100;
 
@@ -36,6 +37,10 @@ impl Duration {
         }
     }
 
+    pub const fn from_s(s: u32) -> Self {
+        Self { us: s * 1_000_000 }
+    }
+
     pub const fn from_ms(ms: u32) -> Self {
         Self { us: ms * 1_000 }
     }
@@ -62,6 +67,12 @@ impl Sub for Duration {
 impl AddAssign for Duration {
     fn add_assign(&mut self, rhs: Self) {
         self.us = self.us.saturating_add(rhs.us)
+    }
+}
+
+impl SubAssign for Duration {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.us = self.us.saturating_sub(rhs.us)
     }
 }
 
