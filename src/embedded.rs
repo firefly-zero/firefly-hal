@@ -2,6 +2,7 @@ use crate::{errors::FSError, shared::*, NetworkError};
 use alloc::{boxed::Box, rc::Rc, string::ToString};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_io::Read;
 use embedded_sdmmc::{
     filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard,
     ShortFileName, VolumeIdx, VolumeManager,
@@ -411,7 +412,7 @@ impl FireflyIO {
             return Err(NetworkError::Error("received zero-sized message"));
         }
         raw.resize(size, 0);
-        uart.read(&mut raw[..])?;
+        uart.read_exact(&mut raw[..])?;
         Ok(raw)
     }
 

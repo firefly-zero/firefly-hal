@@ -322,6 +322,27 @@ impl From<esp_hal::uart::TxError> for NetworkError {
     }
 }
 
+#[cfg(target_os = "none")]
+impl From<esp_hal::uart::IoError> for NetworkError {
+    fn from(err: esp_hal::uart::IoError) -> Self {
+        match err {
+            esp_hal::uart::IoError::Tx(err) => err.into(),
+            esp_hal::uart::IoError::Rx(err) => err.into(),
+            _ => Self::Uart("unknown IO error"),
+        }
+    }
+}
+
+#[cfg(target_os = "none")]
+impl From<embedded_io::ReadExactError<esp_hal::uart::IoError>> for NetworkError {
+    fn from(err: embedded_io::ReadExactError<esp_hal::uart::IoError>) -> Self {
+        match err {
+            embedded_io::ReadExactError::UnexpectedEof => Self::Uart("unexpected EoF"),
+            embedded_io::ReadExactError::Other(err) => err.into(),
+        }
+    }
+}
+
 impl fmt::Display for NetworkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use NetworkError::*;
