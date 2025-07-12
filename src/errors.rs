@@ -275,8 +275,7 @@ pub enum NetworkError {
     OutMessageTooBig,
     UnexpectedResp,
     Decode(postcard::Error),
-    #[cfg(target_os = "none")]
-    Uart(esp_hal::uart::Error),
+    Uart(&'static str),
     Error(&'static str),
     OwnedError(alloc::string::String),
     Other(u32),
@@ -303,9 +302,23 @@ impl From<postcard::Error> for NetworkError {
 // }
 
 #[cfg(target_os = "none")]
-impl From<esp_hal::uart::Error> for NetworkError {
-    fn from(value: esp_hal::uart::Error) -> Self {
-        Self::Uart(value)
+impl From<esp_hal::uart::RxError> for NetworkError {
+    fn from(value: esp_hal::uart::RxError) -> Self {
+        let msg = match value {
+            esp_hal::uart::RxError::FifoOverflowed => "RX FIFO overflowed",
+            esp_hal::uart::RxError::GlitchOccurred => "glitch on RX line",
+            esp_hal::uart::RxError::FrameFormatViolated => "framing error on RX line",
+            esp_hal::uart::RxError::ParityMismatch => "parity error on RX line",
+            _ => "unknown RX error",
+        };
+        Self::Uart(msg)
+    }
+}
+
+#[cfg(target_os = "none")]
+impl From<esp_hal::uart::TxError> for NetworkError {
+    fn from(_: esp_hal::uart::TxError) -> Self {
+        Self::Uart("unknown TX error")
     }
 }
 
@@ -324,25 +337,10 @@ impl fmt::Display for NetworkError {
             OutMessageTooBig => write!(f, "outgoing message is too big"),
             UnexpectedResp => write!(f, "unexpected response"),
             Decode(err) => write!(f, "decode message: {err}"),
+            Uart(err) => write!(f, "SPI error: {err}"),
             Error(err) => write!(f, "network error: {err}"),
             OwnedError(err) => write!(f, "network error: {err}"),
             Other(n) => write!(f, "network error #{n}"),
-
-            #[cfg(target_os = "none")]
-            Uart(err) => {
-                write!(f, "SPI error: ")?;
-                match err {
-                    esp_hal::uart::Error::FifoOverflowed => write!(f, "the RX FIFO overflowed"),
-                    esp_hal::uart::Error::GlitchOccurred => write!(f, "a glitch on the RX line"),
-                    esp_hal::uart::Error::FrameFormatViolated => {
-                        write!(f, "a framing error on the RX line")
-                    }
-                    esp_hal::uart::Error::ParityMismatch => {
-                        write!(f, "a parity error on the RX line")
-                    }
-                    _ => write!(f, "unknown error"),
-                }
-            }
         }
     }
 }

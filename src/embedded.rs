@@ -401,17 +401,17 @@ impl FireflyIO {
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
-        uart.write_bytes(&[size])?;
-        uart.write_bytes(&raw[..])?;
+        uart.write(&[size])?;
+        uart.write(&raw[..])?;
 
         // read response
-        uart.read_bytes(&mut raw[..1])?;
+        uart.read(&mut raw[..1])?;
         let size = usize::from(raw[0]);
         if size == 0 {
             return Err(NetworkError::Error("received zero-sized message"));
         }
         raw.resize(size, 0);
-        uart.read_bytes(&mut raw[..])?;
+        uart.read(&mut raw[..])?;
         Ok(raw)
     }
 
