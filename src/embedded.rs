@@ -151,8 +151,7 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn delay(&self, d: Duration) {
-        let d_micros = d.ns() / 1_000;
-        let d = esp_hal::time::Duration::from_micros(d_micros as u64);
+        let d = esp_hal::time::Duration::from_micros(d.us() as u64);
         self.delay.delay(d);
     }
 

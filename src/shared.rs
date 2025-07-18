@@ -31,7 +31,7 @@ pub struct Duration {
 
 impl Duration {
     /// Given the desired frames per second, get the duration of a single frame.
-    pub fn from_fps(fps: u32) -> Self {
+    pub const fn from_fps(fps: u32) -> Self {
         Self {
             us: 1_000_000 / fps,
         }
@@ -42,15 +42,27 @@ impl Duration {
     }
 
     pub const fn from_ms(ms: u32) -> Self {
-        Self { us: ms * 1_000 }
+        Self { us: ms * 1000 }
     }
 
     pub const fn from_us(us: u32) -> Self {
         Self { us }
     }
 
-    pub fn ns(&self) -> u32 {
-        self.us * 1000
+    pub const fn s(&self) -> u32 {
+        self.us / 1_000_000
+    }
+
+    pub const fn ms(&self) -> u32 {
+        self.us / 1000
+    }
+
+    pub const fn us(&self) -> u32 {
+        self.us
+    }
+
+    pub const fn ns(&self) -> u32 {
+        self.us.saturating_mul(1000)
     }
 }
 
