@@ -36,3 +36,4 @@ esp-hal = { version = "1.0.0-beta.1", features = ["esp32s3", "unstable"] }
 firefly-types = { version = "0.6.0" }
 embedded-hal = { version = "1.0.0" }
 cobs = { version = "0.3.0", default-features = false }
+micromath = { version = "2.1.0", default-features = false }

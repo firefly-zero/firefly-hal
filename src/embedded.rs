@@ -316,17 +316,46 @@ impl<'a> Device for DeviceImpl<'a> {
 }
 
 fn format_pad(raw: (u16, u16)) -> Pad {
+    use micromath::F32Ext;
+
+    // The minimum values are picked empirically to remove
+    // dead zones on the left and on the top.
+    const X_MIN: u16 = 50;
+    const Y_MIN: u16 = 50;
+
+    // The maximum possible values
+    // according to the touchpad's datasheet.
     const X_MAX: u16 = 2047;
     const Y_MAX: u16 = 1535;
 
     let raw_x = raw.0;
-    let x = f32::from(raw_x * 2) / f32::from(X_MAX) - 1.;
-    let x = (x * 1000.) as i16;
-
     let raw_y = raw.1;
-    let y = f32::from(raw_y * 2) / f32::from(Y_MAX) - 1.;
-    let y = (y * -1000.) as i16;
 
+    // Remove dead zone on the left.
+    let raw_x = raw_x.saturating_sub(X_MIN);
+    let raw_y = raw_y.saturating_sub(Y_MIN);
+
+    // Project on the range -1.0..=1.0.
+    let x = f32::from(raw_x * 2) / f32::from(X_MAX - X_MIN) - 1.;
+    let y = f32::from(raw_y * 2) / f32::from(Y_MAX - Y_MIN) - 1.;
+
+    // Scale to remove dead zones on the sides.
+    // The scale values are picked empirically.
+    let mut x = x * 1.40;
+    let mut y = y * 1.25;
+
+    // Scaling might result in the dot being out of circle.
+    // If so, project it back to the circle.
+    let square = x * x + y * y;
+    if square >= 1. {
+        let descale = square.sqrt();
+        x /= descale;
+        y /= descale;
+    }
+
+    // Project on the range -1000.=1000.
+    let x = (x * 1000.) as i16;
+    let y = (y * -1000.) as i16;
     Pad { x, y }
 }
 
