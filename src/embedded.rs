@@ -316,7 +316,7 @@ impl<'a> Device for DeviceImpl<'a> {
 }
 
 fn format_pad(raw: (u16, u16)) -> Pad {
-    use micromath::F32Ext;
+    use micromath::F32;
 
     // The minimum values are picked empirically to remove
     // dead zones on the left and on the top.
@@ -336,8 +336,8 @@ fn format_pad(raw: (u16, u16)) -> Pad {
     let raw_y = raw_y.saturating_sub(Y_MIN);
 
     // Project on the range -1.0..=1.0.
-    let x = f32::from(raw_x * 2) / f32::from(X_MAX - X_MIN) - 1.;
-    let y = f32::from(raw_y * 2) / f32::from(Y_MAX - Y_MIN) - 1.;
+    let x = F32::from(raw_x * 2) / F32::from(X_MAX - X_MIN) - 1.;
+    let y = F32::from(raw_y * 2) / F32::from(Y_MAX - Y_MIN) - 1.;
 
     // Scale to remove dead zones on the sides.
     // The scale values are picked empirically.
@@ -346,7 +346,7 @@ fn format_pad(raw: (u16, u16)) -> Pad {
 
     // Scaling might result in the dot being out of circle.
     // If so, project it back to the circle.
-    let square = x * x + y * y;
+    let square = x.mul_add(x, y * y); // x²+y²
     if square >= 1. {
         let descale = square.sqrt();
         x /= descale;
@@ -354,8 +354,8 @@ fn format_pad(raw: (u16, u16)) -> Pad {
     }
 
     // Project on the range -1000.=1000.
-    let x = (x * 1000.) as i16;
-    let y = (y * -1000.) as i16;
+    let x = f32::from(x * 1000.) as i16;
+    let y = f32::from(y * -1000.) as i16;
     Pad { x, y }
 }
 
