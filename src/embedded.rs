@@ -170,7 +170,7 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         match resp {
             Response::Input(pad, buttons) => Some(InputState {
-                pad: pad.map(|(x, y)| Pad { x, y: -y }),
+                pad: pad.map(format_pad),
                 buttons: !buttons,
             }),
             // Response::PadError => None,
@@ -313,6 +313,21 @@ impl<'a> Device for DeviceImpl<'a> {
     fn get_audio_buffer(&mut self) -> &mut [i16] {
         &mut []
     }
+}
+
+fn format_pad(raw: (u16, u16)) -> Pad {
+    const X_MAX: u16 = 2047;
+    const Y_MAX: u16 = 1535;
+
+    let raw_x = raw.0;
+    let x = f32::from(raw_x * 2) / f32::from(X_MAX) - 1.;
+    let x = (x * 1000.) as i16;
+
+    let raw_y = raw.1;
+    let y = f32::from(raw_y * 2) / f32::from(Y_MAX) - 1.;
+    let y = (y * -1000.) as i16;
+
+    Pad { x, y }
 }
 
 pub struct FileW {
