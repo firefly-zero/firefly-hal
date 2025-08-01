@@ -434,6 +434,7 @@ struct FireflyIO {
 }
 
 impl FireflyIO {
+    /// Send request and read response.
     fn transfer(
         &mut self,
         req: firefly_types::spi::Request<'_>,
@@ -457,6 +458,18 @@ impl FireflyIO {
         raw.resize(size, 0);
         uart.read_exact(&mut raw[..])?;
         Ok(raw)
+    }
+
+    /// Send request without reading response.
+    fn send(&mut self, req: firefly_types::spi::Request<'_>) -> Result<(), NetworkError> {
+        let mut uart = self.uart.borrow_mut();
+        let raw = req.encode_vec()?;
+        let Ok(size) = u8::try_from(raw.len()) else {
+            return Err(NetworkError::Error("request payload is too big"));
+        };
+        uart.write(&[size])?;
+        uart.write(&raw[..])?;
+        Ok(())
     }
 
     fn decode<'b>(&self, raw: &'b [u8]) -> NetworkResult<firefly_types::spi::Response<'b>> {
@@ -534,11 +547,7 @@ impl Network for NetworkImpl<'_> {
 
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetSend(addr, data);
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
-        if resp != firefly_types::spi::Response::NetSent {
-            return Err(NetworkError::UnexpectedResp);
-        }
+        self.io.send(req)?;
         Ok(())
     }
 }
