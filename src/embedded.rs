@@ -412,16 +412,6 @@ impl embedded_io::Read for FileR {
     }
 }
 
-impl wasmi::Read for FileR {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, wasmi::errors::ReadError> {
-        let manager = &self.vm.borrow();
-        match manager.read(self.file, buf) {
-            Ok(size) => Ok(size),
-            Err(_) => Err(wasmi::errors::ReadError::UnknownError),
-        }
-    }
-}
-
 impl Drop for FileR {
     fn drop(&mut self) {
         let manager = &self.vm.borrow();

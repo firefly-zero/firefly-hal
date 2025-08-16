@@ -90,7 +90,7 @@ impl SubAssign for Duration {
 }
 
 pub trait Device {
-    type Read: wasmi::Read + embedded_io::Read;
+    type Read: embedded_io::Read;
     type Write: embedded_io::Write;
     type Network: Network;
     type Serial: Serial;
