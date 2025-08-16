@@ -318,6 +318,10 @@ impl<'a> Network for NetworkImpl<'a> {
         }
         Ok(())
     }
+
+    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
+        Ok(firefly_types::spi::SendStatus::Empty)
+    }
 }
 
 pub struct SerialImpl {

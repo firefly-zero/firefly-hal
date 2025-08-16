@@ -550,6 +550,17 @@ impl Network for NetworkImpl<'_> {
         self.io.send(req)?;
         Ok(())
     }
+
+    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
+        let req = firefly_types::spi::Request::NetSendStatus(addr);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        use firefly_types::spi::Response::*;
+        match resp {
+            NetSendStatus(status) => Ok(status),
+            _ => Err(NetworkError::UnexpectedResp),
+        }
+    }
 }
 
 pub struct SerialImpl {

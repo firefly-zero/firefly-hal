@@ -4,6 +4,7 @@ use core::fmt::Display;
 use core::ops::AddAssign;
 use core::ops::Sub;
 use core::ops::SubAssign;
+use firefly_types::spi::SendStatus;
 
 pub const SAMPLE_RATE: u32 = 44_100;
 
@@ -223,6 +224,9 @@ pub trait Network {
 
     /// Send a raw message to the given device. Non-blocking.
     fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
+
+    /// Send a raw message to the given device. Non-blocking.
+    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
 }
 
 pub trait Serial {
