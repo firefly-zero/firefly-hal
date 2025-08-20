@@ -1,5 +1,5 @@
 use crate::{errors::FSError, shared::*, NetworkError};
-use alloc::{boxed::Box, rc::Rc, string::ToString};
+use alloc::{boxed::Box, rc::Rc, string::ToString, vec::Vec};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
@@ -82,6 +82,10 @@ impl DeviceImpl<'_> {
             dir = open_res?;
         }
         Ok(dir)
+    }
+
+    pub fn alloc_psram(&self, size: usize) -> Vec<u8, esp_alloc::ExternalMemory> {
+        Vec::with_capacity_in(size, esp_alloc::ExternalMemory)
     }
 }
 
@@ -425,10 +429,7 @@ struct FireflyIO {
 
 impl FireflyIO {
     /// Send request and read response.
-    fn transfer(
-        &mut self,
-        req: firefly_types::spi::Request<'_>,
-    ) -> Result<alloc::vec::Vec<u8>, NetworkError> {
+    fn transfer(&mut self, req: firefly_types::spi::Request<'_>) -> Result<Vec<u8>, NetworkError> {
         let mut uart = self.uart.borrow_mut();
 
         // send request
@@ -568,7 +569,7 @@ impl Serial for SerialImpl {
 
     fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
         let mut usb = self.usb_serial.borrow_mut();
-        let mut buf = alloc::vec::Vec::new();
+        let mut buf = Vec::new();
         while let Ok(byte) = usb.read_byte() {
             buf.push(byte);
         }

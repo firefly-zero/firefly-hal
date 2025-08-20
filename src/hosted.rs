@@ -75,6 +75,10 @@ impl<'a> DeviceImpl<'a> {
     pub fn update_input(&mut self, input: InputState) {
         self.gamepad.update_input(input)
     }
+
+    pub fn alloc_psram(&self, size: usize) -> Vec<u8> {
+        Vec::with_capacity(size)
+    }
 }
 
 impl<'a> Device for DeviceImpl<'a> {
@@ -309,7 +313,7 @@ impl<'a> Network for NetworkImpl<'a> {
         Ok(())
     }
 
-    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
+    fn send_status(&mut self, _: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
         Ok(firefly_types::spi::SendStatus::Empty)
     }
 }
