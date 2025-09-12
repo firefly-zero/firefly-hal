@@ -215,7 +215,7 @@ impl<'a> Device for DeviceImpl<'a> {
         };
         let dir = self.get_dir(dir_path)?;
         let manager = &self.vm.borrow();
-        let file = open_file(manager, dir, file_name, Mode::ReadWriteCreate)?;
+        let file = open_file(manager, dir, file_name, Mode::ReadWriteTruncate)?;
         Ok(FileW {
             vm: Rc::clone(&self.vm),
             file,
