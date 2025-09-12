@@ -3,6 +3,8 @@ name = "firefly-hal"
 version = "0.2.0"
 rust-version = "1.82.0"
 edition = "2021"
+description = "Hardware Abstraction Layer for Firefly Zero device and emulators"
+license = "MIT"
 
 [dependencies]
 firefly-types = { version = "0.6.1" }
