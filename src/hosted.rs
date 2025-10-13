@@ -192,6 +192,21 @@ impl<'a> Device for DeviceImpl<'a> {
         self.audio.get_write_buf()
     }
 
+    fn get_battery_status(&mut self) -> Option<BatteryStatus> {
+        use battery::units::electric_potential::microvolt;
+        let manager = battery::Manager::new().ok()?;
+        let mut batteries = manager.batteries().ok()?;
+        let battery = batteries.next()?;
+        let battery = battery.ok()?;
+        let state = battery.state();
+        let voltage = battery.voltage().get::<microvolt>();
+        Some(BatteryStatus {
+            voltage: voltage as u16,
+            connected: state == battery::State::Charging,
+            full: state == battery::State::Full,
+        })
+    }
+
     fn network(&mut self) -> Self::Network {
         NetworkImpl::new(self.config.clone())
     }
@@ -531,15 +546,16 @@ fn start_audio(config: &DeviceConfig) -> AudioWriter {
     };
 
     let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
-    let stream_handle = rodio::OutputStreamBuilder::open_default_stream().unwrap();
-    let mixer = stream_handle.mixer();
+    let mut stream = rodio::OutputStreamBuilder::open_default_stream().unwrap();
+    stream.log_on_drop(false);
+    let mixer = stream.mixer();
     let source = AudioReader { wav, recv };
     mixer.add(source);
     AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
         idx: 0,
         send,
-        _stream_handle: stream_handle,
+        _stream: stream,
     }
 }
 
@@ -548,7 +564,7 @@ struct AudioWriter {
     send: mpsc::SyncSender<i16>,
     /// The index of the next sample that we'll need to try sending.
     idx: usize,
-    _stream_handle: rodio::OutputStream,
+    _stream: rodio::OutputStream,
 }
 
 impl AudioWriter {

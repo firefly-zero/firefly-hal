@@ -198,6 +198,8 @@ pub trait Device {
 
     /// Get a writable slice of free audio buffer region.
     fn get_audio_buffer(&mut self) -> &mut [i16];
+
+    fn get_battery_status(&mut self) -> Option<BatteryStatus>;
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
@@ -299,6 +301,32 @@ impl InputState {
             buttons: self.buttons | other.buttons,
         }
     }
+}
+
+/// The battery status info.
+///
+/// Contains only stats that can be accessed from the hardware.
+/// It's responsibility of firefly-runtime to calculate State of Charge
+/// and any other metrics it might need.
+pub struct BatteryStatus {
+    /// The current voltage of the battery.
+    ///
+    /// A healthy li-ion battery voltage ranges from 3.0V fully discharged
+    /// to 4.2V fully charged at 25°C. However, the range changes with age,
+    /// temperature, and star alignment (the last one is a joke, probably).
+    ///
+    /// Also, the firefly-hal Device implementation doesn't define the units
+    /// in which voltage is returned. it can be volts, microvolts, or anything
+    /// else. The only promise is that it linearly correlates with voltage.
+    pub voltage: u16,
+
+    /// If true, the device is connected to a charger.
+    ///
+    /// It indicates that the battery is charging, unless it's full.
+    pub connected: bool,
+
+    /// If true, the device is fully charged.
+    pub full: bool,
 }
 
 // (func (param $originalPtr i32)
