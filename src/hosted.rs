@@ -5,7 +5,6 @@ use core::cell::Cell;
 use core::fmt::Display;
 use core::marker::PhantomData;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
-use rodio::Source;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
@@ -532,14 +531,14 @@ fn start_audio(config: &DeviceConfig) -> AudioWriter {
     };
 
     let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
-    let (stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    let stream_handle = rodio::OutputStreamBuilder::open_default_stream().unwrap();
+    let mixer = stream_handle.mixer();
     let source = AudioReader { wav, recv };
-    stream_handle.play_raw(source.convert_samples()).unwrap();
+    mixer.add(source);
     AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
         idx: 0,
         send,
-        _stream: stream,
         _stream_handle: stream_handle,
     }
 }
@@ -549,9 +548,7 @@ struct AudioWriter {
     send: mpsc::SyncSender<i16>,
     /// The index of the next sample that we'll need to try sending.
     idx: usize,
-
-    _stream: rodio::OutputStream,
-    _stream_handle: rodio::OutputStreamHandle,
+    _stream_handle: rodio::OutputStream,
 }
 
 impl AudioWriter {
@@ -581,7 +578,7 @@ struct AudioReader {
 }
 
 impl rodio::Source for AudioReader {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         None
     }
 
@@ -599,13 +596,14 @@ impl rodio::Source for AudioReader {
 }
 
 impl Iterator for AudioReader {
-    type Item = i16;
+    type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
         let s = self.recv.try_recv().unwrap_or_default();
         if let Some(wav) = self.wav.as_mut() {
             wav.write_sample(s).unwrap()
         }
+        let s = f32::from(s) / f32::from(i16::MAX);
         Some(s)
     }
 }
