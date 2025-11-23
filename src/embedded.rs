@@ -183,7 +183,7 @@ impl<'a> Device for DeviceImpl<'a> {
         self.rng.random()
     }
 
-    fn get_dir(&mut self, path: &[&str]) -> Result<DirImpl, FSError> {
+    fn open_dir(&mut self, path: &[&str]) -> Result<DirImpl, FSError> {
         let mut manager = self.vm.borrow_mut();
         let mut dir = manager.open_root_dir(self.volume)?;
         for part in path {

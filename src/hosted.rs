@@ -114,7 +114,7 @@ impl<'a> Device for DeviceImpl<'a> {
         rand::random()
     }
 
-    fn get_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
+    fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
         if !path.exists() {

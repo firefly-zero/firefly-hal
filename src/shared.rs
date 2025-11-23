@@ -136,7 +136,7 @@ pub trait Device {
     /// Get a random number.
     fn random(&mut self) -> u32;
 
-    fn get_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError>;
+    fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError>;
 
     fn network(&mut self) -> Self::Network;
 
