@@ -73,17 +73,6 @@ impl DeviceImpl<'_> {
         send_to_serial(&mut usb, &raw);
     }
 
-    fn get_dir(&mut self, path: &[&str]) -> Result<RawDirectory, FSError> {
-        let mut manager = self.vm.borrow_mut();
-        let mut dir = manager.open_root_dir(self.volume)?;
-        for part in path {
-            let open_res = open_dir(&mut manager, dir, part);
-            _ = manager.close_dir(dir);
-            dir = open_res?;
-        }
-        Ok(dir)
-    }
-
     pub fn alloc_psram(&self, size: usize) -> Vec<u8, esp_alloc::ExternalMemory> {
         Vec::with_capacity_in(size, esp_alloc::ExternalMemory)
     }
@@ -136,16 +125,14 @@ fn open_file(
         }
     };
     let res = manager.open_file_in_dir(dir, short_name, mode);
-    _ = manager.close_dir(dir);
     let file = res?;
     Ok(file)
 }
 
 impl<'a> Device for DeviceImpl<'a> {
-    type Read = FileR;
-    type Write = FileW;
     type Network = NetworkImpl<'a>;
     type Serial = SerialImpl;
+    type Dir = DirImpl;
 
     fn now(&self) -> Instant {
         let now = esp_hal::time::Instant::now();
@@ -196,102 +183,18 @@ impl<'a> Device for DeviceImpl<'a> {
         self.rng.random()
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
-        let Some((file_name, dir_path)) = path.split_last() else {
-            return Err(FSError::OpenedDirAsFile);
-        };
-        let dir = self.get_dir(dir_path)?;
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, dir, file_name, Mode::ReadOnly)?;
-        Ok(FileR {
-            vm: Rc::clone(&self.vm),
-            file,
+    fn get_dir(&mut self, path: &[&str]) -> Result<DirImpl, FSError> {
+        let mut manager = self.vm.borrow_mut();
+        let mut dir = manager.open_root_dir(self.volume)?;
+        for part in path {
+            let open_res = open_dir(&mut manager, dir, part);
+            _ = manager.close_dir(dir);
+            dir = open_res?;
+        }
+        Ok(DirImpl {
+            dir,
+            vm: self.vm.clone(),
         })
-    }
-
-    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        let Some((file_name, dir_path)) = path.split_last() else {
-            return Err(FSError::OpenedDirAsFile);
-        };
-        let dir = self.get_dir(dir_path)?;
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, dir, file_name, Mode::ReadWriteCreateOrTruncate)?;
-        Ok(FileW {
-            vm: Rc::clone(&self.vm),
-            file,
-        })
-    }
-
-    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        let Some((file_name, dir_path)) = path.split_last() else {
-            return Err(FSError::OpenedDirAsFile);
-        };
-        let dir = self.get_dir(dir_path)?;
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, dir, file_name, Mode::ReadWriteAppend)?;
-        Ok(FileW {
-            vm: Rc::clone(&self.vm),
-            file,
-        })
-    }
-
-    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
-        let Some((file_name, dir_path)) = path.split_last() else {
-            return Err(FSError::OpenedDirAsFile);
-        };
-        let dir = self.get_dir(dir_path)?;
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, dir, file_name, Mode::ReadOnly)?;
-        let size = manager.file_length(file)?;
-        _ = manager.close_file(file);
-        Ok(size)
-    }
-
-    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError> {
-        let Some((file_name, dir_path)) = path.split_last() else {
-            return Err(FSError::OpenedDirAsFile);
-        };
-        let dir = self.get_dir(dir_path)?;
-        let manager = &self.vm.borrow();
-        let short_name = match get_short_name(manager, dir, file_name) {
-            Ok(short_name) => short_name,
-            Err(err) => {
-                _ = manager.close_dir(dir);
-                return Err(err);
-            }
-        };
-        let res = manager.delete_file_in_dir(dir, short_name);
-        _ = manager.close_dir(dir);
-        res?;
-        Ok(())
-    }
-
-    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> Result<(), FSError>
-    where
-        F: FnMut(crate::EntryKind, &[u8]),
-    {
-        let dir = self.get_dir(path)?;
-        let manager = &self.vm.borrow();
-        let mut buf = [0u8; 64];
-        let mut lfnb = LfnBuffer::new(&mut buf);
-        manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
-            let base_name = entry.name.base_name();
-            if base_name.first() == Some(&b'.') {
-                return;
-            }
-            let name = match long_name {
-                Some(long_name) => long_name.trim_ascii().as_bytes(),
-                None => base_name,
-            };
-            let kind = if entry.attributes.is_directory() {
-                EntryKind::Dir
-            } else {
-                EntryKind::File
-            };
-            f(kind, name);
-        })?;
-        _ = manager.close_dir(dir);
-        Ok(())
     }
 
     fn network(&mut self) -> Self::Network {
@@ -324,6 +227,97 @@ impl<'a> Device for DeviceImpl<'a> {
             connected: true,
             full: false,
         })
+    }
+}
+
+pub struct DirImpl {
+    vm: Rc<RefCell<VM>>,
+    dir: RawDirectory,
+}
+
+impl Dir for DirImpl {
+    type Read = FileR;
+    type Write = FileW;
+
+    fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
+        let manager = &self.vm.borrow();
+        let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
+        Ok(FileR {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
+    }
+
+    fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let manager = &self.vm.borrow();
+        let file = open_file(manager, self.dir, name, Mode::ReadWriteCreateOrTruncate)?;
+        Ok(FileW {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
+    }
+
+    fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let manager = &self.vm.borrow();
+        let file = open_file(manager, self.dir, name, Mode::ReadWriteAppend)?;
+        Ok(FileW {
+            vm: Rc::clone(&self.vm),
+            file,
+        })
+    }
+
+    fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
+        let manager = &self.vm.borrow();
+        let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
+        let size = manager.file_length(file)?;
+        _ = manager.close_file(file);
+        Ok(size)
+    }
+
+    fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
+        let manager = &self.vm.borrow();
+        let short_name = match get_short_name(manager, self.dir, name) {
+            Ok(short_name) => short_name,
+            Err(err) => {
+                return Err(err);
+            }
+        };
+        let res = manager.delete_file_in_dir(self.dir, short_name);
+        res?;
+        Ok(())
+    }
+
+    fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
+    where
+        F: FnMut(crate::EntryKind, &[u8]),
+    {
+        let manager = &self.vm.borrow();
+        let mut buf = [0u8; 64];
+        let mut lfnb = LfnBuffer::new(&mut buf);
+        manager.iterate_dir_lfn(self.dir, &mut lfnb, |entry, long_name| {
+            let base_name = entry.name.base_name();
+            if base_name.first() == Some(&b'.') {
+                return;
+            }
+            let name = match long_name {
+                Some(long_name) => long_name.trim_ascii().as_bytes(),
+                None => base_name,
+            };
+            let kind = if entry.attributes.is_directory() {
+                EntryKind::Dir
+            } else {
+                EntryKind::File
+            };
+            f(kind, name);
+        })?;
+        Ok(())
+    }
+}
+
+impl Drop for DirImpl {
+    fn drop(&mut self) {
+        let manager = &self.vm.borrow();
+        _ = manager.close_dir(self.dir);
     }
 }
 

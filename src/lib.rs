@@ -20,6 +20,6 @@ mod device;
 #[cfg(not(target_os = "none"))]
 pub use device::DeviceConfig;
 
-pub use device::{Addr, DeviceImpl, NetworkImpl, SerialImpl};
+pub use device::{Addr, DeviceImpl, DirImpl, NetworkImpl, SerialImpl};
 pub use errors::*;
 pub use shared::*;

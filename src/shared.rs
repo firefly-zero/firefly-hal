@@ -90,10 +90,9 @@ impl SubAssign for Duration {
 }
 
 pub trait Device {
-    type Read: embedded_io::Read;
-    type Write: embedded_io::Write;
     type Network: Network;
     type Serial: Serial;
+    type Dir: Dir;
 
     /// The current time.
     ///
@@ -137,54 +136,7 @@ pub trait Device {
     /// Get a random number.
     fn random(&mut self) -> u32;
 
-    /// Open a file for reading.
-    ///
-    /// The file path is given as a slice of path components.
-    /// There are at least 4 components:
-    ///
-    /// 1. the first one is the root directory (either "roms" or "data"),
-    /// 2. the second is the author ID,
-    /// 3. the third is the app ID,
-    /// 4. (optional) directory names if the file is nested,
-    /// 5. and the last is file name.
-    ///
-    /// The runtime ensures that the path is relative and never goes up the tree.
-    ///
-    /// The whole filesystem abstraction (this method and theo nes below)
-    /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
-    ///
-    /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
-    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError>;
-
-    /// Create a new file and open it for write.
-    ///
-    /// If the file already exists, it will be overwritten.
-    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError>;
-
-    /// Write data to the end of the file.
-    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError>;
-
-    /// Get file size in bytes.
-    ///
-    /// None should be returned if file not found.
-    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError>;
-
-    /// Delete the given file if exists.
-    ///
-    /// Directories cannot be removed.
-    ///
-    /// Returns false only if there is an error.
-    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError>;
-
-    /// Call the callback for each entry in the given directory.
-    ///
-    /// A better API would be to return an iterator
-    /// but embedded-sdmmc-rs [doesn't support it][1].
-    ///
-    /// [1]: https://github.com/rust-embedded-community/embedded-sdmmc-rs/issues/125
-    fn iter_dir<F>(&mut self, path: &[&str], f: F) -> Result<(), FSError>
-    where
-        F: FnMut(EntryKind, &[u8]);
+    fn get_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError>;
 
     fn network(&mut self) -> Self::Network;
 
@@ -229,6 +181,60 @@ pub trait Network {
 
     /// Send a raw message to the given device. Non-blocking.
     fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
+}
+
+pub trait Dir {
+    type Read: embedded_io::Read;
+    type Write: embedded_io::Write;
+
+    /// Open a file for reading.
+    ///
+    /// The file path is given as a slice of path components.
+    /// There are at least 4 components:
+    ///
+    /// 1. the first one is the root directory (either "roms" or "data"),
+    /// 2. the second is the author ID,
+    /// 3. the third is the app ID,
+    /// 4. (optional) directory names if the file is nested,
+    /// 5. and the last is file name.
+    ///
+    /// The runtime ensures that the path is relative and never goes up the tree.
+    ///
+    /// The whole filesystem abstraction (this method and the ones below)
+    /// is designed to work nicely with [embedded_sdmmc] and the stdlib filesystem.
+    ///
+    /// [embedded_sdmmc]: https://github.com/rust-embedded-community/embedded-sdmmc-rs
+    fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError>;
+
+    /// Create a new file and open it for write.
+    ///
+    /// If the file already exists, it will be overwritten.
+    fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError>;
+
+    /// Write data to the end of the file.
+    fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError>;
+
+    /// Get file size in bytes.
+    ///
+    /// None should be returned if file not found.
+    fn get_file_size(&mut self, name: &str) -> Result<u32, FSError>;
+
+    /// Delete the given file if exists.
+    ///
+    /// Directories cannot be removed.
+    ///
+    /// Returns false only if there is an error.
+    fn remove_file(&mut self, name: &str) -> Result<(), FSError>;
+
+    /// Call the callback for each entry in the given directory.
+    ///
+    /// A better API would be to return an iterator
+    /// but embedded-sdmmc-rs [doesn't support it][1].
+    ///
+    /// [1]: https://github.com/rust-embedded-community/embedded-sdmmc-rs/issues/125
+    fn iter_dir<F>(&mut self, f: F) -> Result<(), FSError>
+    where
+        F: FnMut(EntryKind, &[u8]);
 }
 
 pub trait Serial {

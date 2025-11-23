@@ -82,9 +82,8 @@ impl<'a> DeviceImpl<'a> {
 
 impl<'a> Device for DeviceImpl<'a> {
     type Network = NetworkImpl<'a>;
-    type Read = File;
     type Serial = SerialImpl;
-    type Write = File;
+    type Dir = DirImpl;
 
     fn now(&self) -> Instant {
         let now = std::time::Instant::now();
@@ -115,73 +114,16 @@ impl<'a> Device for DeviceImpl<'a> {
         rand::random()
     }
 
-    fn open_file(&mut self, path: &[&str]) -> Result<Self::Read, FSError> {
+    fn get_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
         let path: PathBuf = path.iter().collect();
         let path = self.config.root.join(path);
-        let file = std::fs::File::open(path)?;
-        Ok(File { file })
-    }
-
-    fn create_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        if let Some(parent) = path.parent() {
-            _ = std::fs::create_dir_all(parent);
+        if !path.exists() {
+            return Err(FSError::NotFound);
         }
-        let file = std::fs::File::create(path)?;
-        Ok(File { file })
-    }
-
-    fn append_file(&mut self, path: &[&str]) -> Result<Self::Write, FSError> {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        let mut opts = std::fs::OpenOptions::new();
-        let file = opts.append(true).open(path)?;
-        Ok(File { file })
-    }
-
-    fn get_file_size(&mut self, path: &[&str]) -> Result<u32, FSError> {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        let meta = std::fs::metadata(path)?;
-        Ok(meta.len() as u32)
-    }
-
-    fn remove_file(&mut self, path: &[&str]) -> Result<(), FSError> {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        let res = std::fs::remove_file(path);
-        match res {
-            Ok(_) => Ok(()),
-            Err(err) => match err.kind() {
-                std::io::ErrorKind::NotFound => Ok(()),
-                _ => Err(err.into()),
-            },
+        if !path.is_dir() {
+            return Err(FSError::OpenedFileAsDir);
         }
-    }
-
-    fn iter_dir<F>(&mut self, path: &[&str], mut f: F) -> Result<(), FSError>
-    where
-        F: FnMut(EntryKind, &[u8]),
-    {
-        let path: PathBuf = path.iter().collect();
-        let path = self.config.root.join(path);
-        let entries = std::fs::read_dir(path)?;
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            let kind = if path.is_dir() {
-                EntryKind::Dir
-            } else if path.is_file() {
-                EntryKind::File
-            } else {
-                continue;
-            };
-            let fname = entry.file_name();
-            let fname = fname.as_encoded_bytes();
-            f(kind, fname);
-        }
-        Ok(())
+        Ok(DirImpl { path })
     }
 
     fn has_headphones(&mut self) -> bool {
@@ -213,6 +155,77 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn serial(&self) -> Self::Serial {
         SerialImpl::new(self.config.tcp_ip)
+    }
+}
+
+pub struct DirImpl {
+    path: PathBuf,
+}
+
+impl Dir for DirImpl {
+    type Read = File;
+    type Write = File;
+
+    fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
+        let path = self.path.join(name);
+        let file = std::fs::File::open(path)?;
+        Ok(File { file })
+    }
+
+    fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let path = self.path.join(name);
+        if let Some(parent) = path.parent() {
+            _ = std::fs::create_dir_all(parent);
+        }
+        let file = std::fs::File::create(path)?;
+        Ok(File { file })
+    }
+
+    fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let path = self.path.join(name);
+        let mut opts = std::fs::OpenOptions::new();
+        let file = opts.append(true).open(path)?;
+        Ok(File { file })
+    }
+
+    fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
+        let path = self.path.join(name);
+        let meta = std::fs::metadata(path)?;
+        Ok(meta.len() as u32)
+    }
+
+    fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
+        let path = self.path.join(name);
+        let res = std::fs::remove_file(path);
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(err.into()),
+            },
+        }
+    }
+
+    fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
+    where
+        F: FnMut(EntryKind, &[u8]),
+    {
+        let entries = std::fs::read_dir(&self.path)?;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            let kind = if path.is_dir() {
+                EntryKind::Dir
+            } else if path.is_file() {
+                EntryKind::File
+            } else {
+                continue;
+            };
+            let fname = entry.file_name();
+            let fname = fname.as_encoded_bytes();
+            f(kind, fname);
+        }
+        Ok(())
     }
 }
 
@@ -521,12 +534,7 @@ impl RingBuf {
         self.next = (self.next + 1) % 4
     }
 
-    fn iter_mut(
-        &mut self,
-    ) -> std::iter::FilterMap<
-        core::slice::IterMut<Option<TcpStream>>,
-        impl FnMut(&mut Option<TcpStream>) -> Option<&mut TcpStream>,
-    > {
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut TcpStream> {
         self.data.iter_mut().filter_map(Option::as_mut)
     }
 }
