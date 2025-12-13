@@ -77,13 +77,27 @@ fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
     }
 
     // Left stick works as pad only if it is pressed down.
+    //
+    // The only exceptions is Firefly Zero because
+    // it uses touchpad instead of stick and hence has no drift.
+    // Steam Controller, despite having two touchpads, by default uses
+    // stick for the left coordinate instead of the left touchpad.
+    //
+    // We don't check vendor ID for Firefly Zero because it's not settled yet.
+    // The dev version of the gamepad mode uses Flipper Devices Inc VID (0x37C1).
+    let is_precise = gamepad.product_id() == Some(0x1337);
     let pad_pressed =
         gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
-    if pad_pressed {
-        return make_point(
+    if is_precise || pad_pressed {
+        let maybe_point = make_point(
             gamepad.axis_data(Axis::LeftStickX),
             gamepad.axis_data(Axis::LeftStickY),
         );
+        let point = maybe_point?;
+        if is_precise && point.x == 0 && point.y == 0 {
+            return None;
+        }
+        return Some(point);
     };
 
     let pad = make_point(
