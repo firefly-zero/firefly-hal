@@ -1,15 +1,15 @@
-use crate::{errors::FSError, shared::*, NetworkError};
+use crate::{NetworkError, errors::FSError, shared::*};
 use alloc::{boxed::Box, rc::Rc, string::ToString, vec::Vec};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
 use embedded_sdmmc::{
-    filesystem::ToShortFileName, LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard,
-    ShortFileName, VolumeIdx, VolumeManager,
+    LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard, ShortFileName, VolumeIdx,
+    VolumeManager, filesystem::ToShortFileName,
 };
 use esp_hal::{
-    delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
-    usb_serial_jtag::UsbSerialJtag, Blocking,
+    Blocking, delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
+    usb_serial_jtag::UsbSerialJtag,
 };
 use firefly_types::Encode;
 
