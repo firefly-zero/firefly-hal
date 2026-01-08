@@ -1,5 +1,6 @@
 use core::fmt;
 
+#[derive(Debug)]
 pub enum FSError {
     /// The underlying block device threw an error.
     DeviceError(alloc::string::String),

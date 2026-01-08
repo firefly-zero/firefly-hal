@@ -277,19 +277,19 @@ pub struct InputState {
 }
 
 impl InputState {
-    pub fn a(&self) -> bool {
+    pub fn s(&self) -> bool {
         self.buttons & 0b1 > 0
     }
 
-    pub fn b(&self) -> bool {
+    pub fn e(&self) -> bool {
         self.buttons & 0b10 > 0
     }
 
-    pub fn x(&self) -> bool {
+    pub fn w(&self) -> bool {
         self.buttons & 0b100 > 0
     }
 
-    pub fn y(&self) -> bool {
+    pub fn n(&self) -> bool {
         self.buttons & 0b1000 > 0
     }
 
