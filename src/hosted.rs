@@ -54,7 +54,7 @@ pub struct DeviceImpl<'a> {
     /// The shared logic for reading the gamepad input.
     gamepad: GamepadManager,
     /// The audio buffer
-    audio: AudioWriter,
+    audio: Option<AudioWriter>,
     _life: &'a PhantomData<()>,
 }
 
@@ -131,7 +131,10 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn get_audio_buffer(&mut self) -> &mut [i16] {
-        self.audio.get_write_buf()
+        match &mut self.audio {
+            Some(audio) => audio.get_write_buf(),
+            None => &mut [][..],
+        }
     }
 
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
@@ -541,7 +544,7 @@ impl RingBuf {
     }
 }
 
-fn start_audio(config: &DeviceConfig) -> AudioWriter {
+fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
     let wav = if let Some(filename) = &config.wav {
         let spec = hound::WavSpec {
             channels: 2,
@@ -556,17 +559,21 @@ fn start_audio(config: &DeviceConfig) -> AudioWriter {
     };
 
     let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
-    let mut stream = rodio::OutputStreamBuilder::open_default_stream().unwrap();
+    let Ok(mut stream) = rodio::OutputStreamBuilder::open_default_stream() else {
+        eprintln!("WARNING: audio device is not available, sound will be disabled");
+        return None;
+    };
     stream.log_on_drop(false);
     let mixer = stream.mixer();
     let source = AudioReader { wav, recv };
     mixer.add(source);
-    AudioWriter {
+    let audio = AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
         idx: 0,
         send,
         _stream: stream,
-    }
+    };
+    Some(audio)
 }
 
 struct AudioWriter {
