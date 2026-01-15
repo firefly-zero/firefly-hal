@@ -137,6 +137,11 @@ impl<'a> Device for DeviceImpl<'a> {
         }
     }
 
+    #[cfg(target_os = "android")]
+    fn get_battery_status(&mut self) -> Option<BatteryStatus> {
+        None
+    }
+    #[cfg(not(target_os = "android"))]
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
         use battery::units::electric_potential::microvolt;
         let manager = battery::Manager::new().ok()?;
@@ -545,6 +550,8 @@ impl RingBuf {
 }
 
 fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
+    if cfg!(target_os = "android") { return None }
+    
     let wav = if let Some(filename) = &config.wav {
         let spec = hound::WavSpec {
             channels: 2,
