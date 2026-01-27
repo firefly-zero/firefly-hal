@@ -1,6 +1,6 @@
 [package]
 name = "firefly-hal"
-version = "0.3.1"
+version = "0.3.2"
 rust-version = "1.89.0"
 edition = "2024"
 description = "Hardware Abstraction Layer for Firefly Zero device and emulators"
@@ -11,12 +11,15 @@ firefly-types = { version = "0.7.1" }
 postcard = "1.1.3"
 
 # hosted
-[target.'cfg(not(target_os = "none"))'.dependencies]
+[target.'cfg(not(any(target_os = "none", target_os = "android")))'.dependencies]
 # access system battery info
 battery = "0.7.8"
-embedded-io = { version = "0.6.1", features = ["std"] }
 # read gamepad input
 gilrs = "0.11.1"
+
+[target.'cfg(not(target_os = "none"))'.dependencies]
+embedded-io = { version = "0.6.1", features = ["std"] }
+
 # play audio through speakers
 rodio = { version = "0.21.1", features = ["playback"] }
 # record audio as wav
@@ -31,6 +34,10 @@ rust-embed = { version = "8.0.0", features = ["debug-embed"] }
 vfs = { version = "0.12.0", features = ["embedded-fs"] }
 wasm-bindgen = "0.2.93"
 web-sys = { version = "0.3.69", features = ["Window", "Performance"] }
+
+# android
+[target.'cfg(target_os = "android")'.dependencies]
+macroquad = "0.4"
 
 # embedded
 [target.'cfg(target_os = "none")'.dependencies]
