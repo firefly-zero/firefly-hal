@@ -37,7 +37,7 @@ impl GamepadManager {
     pub fn read_input(&mut self) -> Option<InputState> {
         #[allow(unused_mut)]
         let mut buttons = 0u8;
-        #[allow(unused_mut)]
+        #[allow(unused_mut, unused_assignments)]
         let mut pad = None;
 
         #[cfg(not(target_os = "android"))]
@@ -65,7 +65,6 @@ impl GamepadManager {
                 buttons = buttons << 1 | u8::from(b);
             }
         }
-      
 
         // merge together input from gamepad and from keyboard
         let buttons = self.input.buttons | buttons;
@@ -153,4 +152,3 @@ fn data_to_i16(v: Option<&AxisData>) -> Option<i16> {
     let r = (v * 1000.) as i16;
     Some(r)
 }
-
