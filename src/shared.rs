@@ -244,6 +244,7 @@ pub trait Serial {
     fn send(&mut self, data: &[u8]) -> NetworkResult<()>;
 }
 
+#[derive(PartialEq, Copy, Clone)]
 pub enum EntryKind {
     Dir,
     File,
