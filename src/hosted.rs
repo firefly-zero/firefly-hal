@@ -144,6 +144,7 @@ impl<'a> Device for DeviceImpl<'a> {
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
         None
     }
+
     #[cfg(not(target_os = "android"))]
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
         use battery::units::electric_potential::microvolt;

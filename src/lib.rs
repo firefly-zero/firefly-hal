@@ -6,9 +6,6 @@
 
 extern crate alloc;
 
-#[cfg(not(target_os = "none"))]
-mod gamepad;
-
 mod errors;
 mod shared;
 
@@ -16,6 +13,11 @@ mod shared;
 #[cfg_attr(not(target_os = "none"), path = "hosted.rs")]
 #[cfg_attr(target_os = "none", path = "embedded.rs")]
 mod device;
+
+#[cfg(not(target_os = "none"))]
+#[cfg_attr(target_os = "android", path = "gamepad_android.rs")]
+#[cfg_attr(not(target_os = "android"), path = "gamepad.rs")]
+mod gamepad;
 
 #[cfg(not(target_os = "none"))]
 pub use device::DeviceConfig;
