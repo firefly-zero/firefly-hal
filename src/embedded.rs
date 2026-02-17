@@ -287,6 +287,18 @@ impl Dir for DirImpl {
         Ok(())
     }
 
+    fn remove_dir(self) -> Result<(), FSError> {
+        let manager = &self.vm.borrow();
+        let dir = self.dir.to_directory(manager);
+        // TODO: Replace with `delete_file_in_dir`
+        //      when embedded-sdmmc 0.10.0 is released.
+        //      https://github.com/rust-embedded-community/embedded-sdmmc-rs/pull/210
+        dir.iterate_dir(|entry| {
+            let _ = dir.delete_file_in_dir(&entry.name);
+        })?;
+        Ok(())
+    }
+
     fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
     where
         F: FnMut(crate::EntryKind, &[u8]),

@@ -209,6 +209,17 @@ impl Dir for DirImpl {
         }
     }
 
+    fn remove_dir(self) -> Result<(), FSError> {
+        let res = std::fs::remove_dir_all(&self.path);
+        match res {
+            Ok(_) => Ok(()),
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => Ok(()),
+                _ => Err(err.into()),
+            },
+        }
+    }
+
     fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
     where
         F: FnMut(EntryKind, &[u8]),

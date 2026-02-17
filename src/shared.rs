@@ -226,6 +226,9 @@ pub trait Dir {
     /// Returns false only if there is an error.
     fn remove_file(&mut self, name: &str) -> Result<(), FSError>;
 
+    /// Remove the directory and all its contents.
+    fn remove_dir(self) -> Result<(), FSError>;
+
     /// Call the callback for each entry in the given directory.
     ///
     /// A better API would be to return an iterator
