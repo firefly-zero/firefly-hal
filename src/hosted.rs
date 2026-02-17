@@ -60,7 +60,10 @@ pub struct DeviceImpl<'a> {
 
 impl<'a> DeviceImpl<'a> {
     pub fn new(config: DeviceConfig) -> Self {
+        #[cfg(not(target_os = "android"))]
         let audio = start_audio(&config);
+        #[cfg(target_os = "android")]
+        let audio = None;
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
@@ -137,6 +140,11 @@ impl<'a> Device for DeviceImpl<'a> {
         }
     }
 
+    #[cfg(target_os = "android")]
+    fn get_battery_status(&mut self) -> Option<BatteryStatus> {
+        None
+    }
+    #[cfg(not(target_os = "android"))]
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
         use battery::units::electric_potential::microvolt;
         let manager = battery::Manager::new().ok()?;
@@ -555,6 +563,7 @@ impl RingBuf {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
     let wav = if let Some(filename) = &config.wav {
         let spec = hound::WavSpec {
@@ -592,6 +601,7 @@ struct AudioWriter {
     send: mpsc::SyncSender<i16>,
     /// The index of the next sample that we'll need to try sending.
     idx: usize,
+    #[cfg(not(target_os = "android"))]
     _stream: rodio::OutputStream,
 }
 
@@ -616,11 +626,13 @@ impl AudioWriter {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 struct AudioReader {
     wav: Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>>,
     recv: mpsc::Receiver<i16>,
 }
 
+#[cfg(not(target_os = "android"))]
 impl rodio::Source for AudioReader {
     fn current_span_len(&self) -> Option<usize> {
         None
@@ -639,6 +651,7 @@ impl rodio::Source for AudioReader {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 impl Iterator for AudioReader {
     type Item = f32;
 
