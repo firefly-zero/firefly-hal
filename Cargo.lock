@@ -907,7 +907,7 @@ checksum = "52051878f80a721bb68ebfbc930e07b65ba72f2da88968ea5c06fd6ca3d3a127"
 
 [[package]]
 name = "firefly-hal"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "battery",
  "cobs 0.5.0",
@@ -933,9 +933,9 @@ dependencies = [
 
 [[package]]
 name = "firefly-types"
-version = "0.7.1"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7922d445b31f0c96a1712f504d8dfd720df64cd3acc18324109d928e11c00a"
+checksum = "7e9d24df2e684ea2ac8338bd0a7131121d8c73e208523b8695b09646b76adc40"
 dependencies = [
  "postcard",
  "serde",

@@ -1,13 +1,13 @@
 [package]
 name = "firefly-hal"
-version = "0.3.2"
+version = "0.3.3"
 rust-version = "1.89.0"
 edition = "2024"
 description = "Hardware Abstraction Layer for Firefly Zero device and emulators"
 license = "MIT"
 
 [dependencies]
-firefly-types = { version = "0.7.1" }
+firefly-types = { version = "0.8.1" }
 postcard = "1.1.3"
 
 # hosted
