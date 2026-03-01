@@ -85,6 +85,7 @@ impl<'a> DeviceImpl<'a> {
 
 impl<'a> Device for DeviceImpl<'a> {
     type Network = NetworkImpl<'a>;
+    type Wifi = WifiImpl;
     type Serial = SerialImpl;
     type Dir = DirImpl;
 
@@ -163,6 +164,10 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn network(&mut self) -> Self::Network {
         NetworkImpl::new(self.config.clone())
+    }
+
+    fn wifi(&mut self) -> Self::Wifi {
+        WifiImpl::new()
     }
 
     fn serial(&self) -> Self::Serial {
@@ -428,6 +433,39 @@ impl Serial for SerialImpl {
         Ok(())
     }
 }
+
+pub struct WifiImpl {}
+
+impl WifiImpl {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Wifi for WifiImpl {
+    fn scan(&mut self) -> NetworkResult<[String; 6]> {
+        let points = [""; 6];
+        let points = points.map(|s| s.to_string());
+        Ok(points)
+    }
+
+    fn connect(&mut self, _ssid: &str, _pass: &str) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn disconnect(self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
+        todo!()
+    }
+
+    fn tcp_close(&mut self) -> NetworkResult<()> {
+        todo!()
+    }
+}
+
 type NetMessage = (SocketAddr, Box<[u8]>);
 type SerialMessage = Box<[u8]>;
 
