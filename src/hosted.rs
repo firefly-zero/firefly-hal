@@ -444,7 +444,14 @@ impl WifiImpl {
 
 impl Wifi for WifiImpl {
     fn scan(&mut self) -> NetworkResult<[String; 6]> {
-        let points = [""; 6];
+        let points = [
+            "Bad Omens",
+            "FGBGFM",
+            "the death of peace of mind",
+            "Concrete Jungle",
+            "Specter",
+            "Dying to love",
+        ];
         let points = points.map(|s| s.to_string());
         Ok(points)
     }
@@ -453,16 +460,20 @@ impl Wifi for WifiImpl {
         Ok(())
     }
 
+    fn status(&mut self) -> NetworkResult<u8> {
+        Ok(1)
+    }
+
     fn disconnect(self) -> NetworkResult<()> {
         Ok(())
     }
 
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
-        todo!()
+        Ok(())
     }
 
     fn tcp_close(&mut self) -> NetworkResult<()> {
-        todo!()
+        Ok(())
     }
 }
 

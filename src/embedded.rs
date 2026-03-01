@@ -659,6 +659,17 @@ impl Wifi for WifiImpl {
         }
     }
 
+    fn status(&mut self) -> NetworkResult<u8> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::WifiStatus;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        let Response::WifiStatus(status) = resp else {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(status)
+    }
+
     fn disconnect(mut self) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::WifiDisconnect;

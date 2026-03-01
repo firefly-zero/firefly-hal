@@ -195,6 +195,7 @@ pub trait Network {
 pub trait Wifi {
     fn scan(&mut self) -> NetworkResult<[String; 6]>;
     fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()>;
+    fn status(&mut self) -> NetworkResult<u8>;
     fn disconnect(self) -> NetworkResult<()>;
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()>;
     fn tcp_close(&mut self) -> NetworkResult<()>;
