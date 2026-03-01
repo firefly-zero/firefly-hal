@@ -1,5 +1,10 @@
 use crate::{NetworkError, errors::FSError, shared::*};
-use alloc::{boxed::Box, rc::Rc, string::ToString, vec::Vec};
+use alloc::{
+    boxed::Box,
+    rc::Rc,
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::{cell::RefCell, marker::PhantomData, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
@@ -131,6 +136,7 @@ fn open_file(
 
 impl<'a> Device for DeviceImpl<'a> {
     type Network = NetworkImpl<'a>;
+    type Wifi = WifiImpl;
     type Serial = SerialImpl;
     type Dir = DirImpl;
 
@@ -204,6 +210,14 @@ impl<'a> Device for DeviceImpl<'a> {
             },
             addr: self.addr,
             _life: &PhantomData,
+        }
+    }
+
+    fn wifi(&mut self) -> Self::Wifi {
+        WifiImpl {
+            io: FireflyIO {
+                uart: Rc::clone(&self.io_uart),
+            },
         }
     }
 
@@ -614,6 +628,55 @@ fn send_to_serial(usb: &mut UsbSerialJtag<'static, Blocking>, data: &[u8]) {
     }
     _ = usb.write_byte_nb(0x00);
     _ = usb.flush_tx_nb();
+}
+
+pub struct WifiImpl {
+    io: FireflyIO,
+}
+
+impl Wifi for WifiImpl {
+    fn scan(&mut self) -> NetworkResult<[String; 6]> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::WifiScan;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        let Response::WifiScan(points) = resp else {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        let points = points.map(|s| s.to_string());
+        Ok(points)
+    }
+
+    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::WifiConnect(ssid, pass);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        match resp {
+            Response::WifiConnected => Ok(()),
+            Response::Error(msg) => Err(NetworkError::OwnedError(msg.to_string())),
+            _ => Err(NetworkError::UnexpectedResp),
+        }
+    }
+
+    fn disconnect(mut self) -> NetworkResult<()> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::WifiDisconnect;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != Response::WifiDisconnected {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(())
+    }
+
+    fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
+        todo!()
+    }
+
+    fn tcp_close(&mut self) -> NetworkResult<()> {
+        todo!()
+    }
 }
 
 struct FakeTimesource {}

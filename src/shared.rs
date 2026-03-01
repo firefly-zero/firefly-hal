@@ -1,5 +1,6 @@
 use crate::errors::*;
 use alloc::boxed::Box;
+use alloc::string::String;
 use core::fmt::Display;
 use core::ops::AddAssign;
 use core::ops::Sub;
@@ -91,6 +92,7 @@ impl SubAssign for Duration {
 
 pub trait Device {
     type Network: Network;
+    type Wifi: Wifi;
     type Serial: Serial;
     type Dir: Dir;
 
@@ -140,6 +142,8 @@ pub trait Device {
 
     fn network(&mut self) -> Self::Network;
 
+    fn wifi(&mut self) -> Self::Wifi;
+
     /// Access the USB serial port.
     ///
     /// Both read and write operations are non-blocking.
@@ -162,7 +166,10 @@ pub trait Network {
     /// For emulator, it is IP+port. For the physical device, it is MAC address.
     type Addr: Ord;
 
+    /// Start accepting incoming network connections from other peers.
     fn start(&mut self) -> NetworkResult<()>;
+
+    /// Stop accepting incoming network connections from other peers.
     fn stop(&mut self) -> NetworkResult<()>;
 
     /// Network address of the current device as visible to the other peers.
@@ -170,6 +177,8 @@ pub trait Network {
     /// Used to sort all the peers, including the local one, in the same order
     /// on all devices.
     fn local_addr(&self) -> Self::Addr;
+
+    /// Broadcast device presence to all other devices nearby.
     fn advertise(&mut self) -> NetworkResult<()>;
 
     /// Get a pending message, if any. Non-blocking.
@@ -181,6 +190,14 @@ pub trait Network {
 
     /// Send a raw message to the given device. Non-blocking.
     fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
+}
+
+pub trait Wifi {
+    fn scan(&mut self) -> NetworkResult<[String; 6]>;
+    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()>;
+    fn disconnect(self) -> NetworkResult<()>;
+    fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()>;
+    fn tcp_close(&mut self) -> NetworkResult<()>;
 }
 
 pub trait Dir {

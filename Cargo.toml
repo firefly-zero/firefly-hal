@@ -53,3 +53,6 @@ embedded-hal = { version = "1.0.0" }
 cobs = { version = "0.5.0", default-features = false }
 # fast f32 approximation math for calibrating touchpad
 micromath = { version = "2.1.0", default-features = false }
+
+[patch.crates-io]
+firefly-types = { path = "../firefly-types" }
