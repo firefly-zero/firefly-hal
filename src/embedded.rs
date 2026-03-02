@@ -682,11 +682,47 @@ impl Wifi for WifiImpl {
     }
 
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
-        todo!()
+        use firefly_types::spi::{Request, Response};
+        let req = Request::TcpConnect(ip, port);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != Response::TcpConnected {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(())
+    }
+
+    fn tcp_status(&mut self) -> NetworkResult<u8> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::TcpStatus;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        let Response::TcpStatus(status) = resp else {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(status)
+    }
+
+    fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::TcpSend(data);
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != Response::TcpSent {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(())
     }
 
     fn tcp_close(&mut self) -> NetworkResult<()> {
-        todo!()
+        use firefly_types::spi::{Request, Response};
+        let req = Request::TcpClose;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        if resp != Response::TcpClosed {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        Ok(())
     }
 }
 

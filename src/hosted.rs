@@ -472,6 +472,14 @@ impl Wifi for WifiImpl {
         Ok(())
     }
 
+    fn tcp_status(&mut self) -> NetworkResult<u8> {
+        Ok(5)
+    }
+
+    fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+
     fn tcp_close(&mut self) -> NetworkResult<()> {
         Ok(())
     }
