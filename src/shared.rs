@@ -200,6 +200,7 @@ pub trait Wifi {
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()>;
     fn tcp_status(&mut self) -> NetworkResult<u8>;
     fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()>;
+    fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>>;
     fn tcp_close(&mut self) -> NetworkResult<()>;
 }
 

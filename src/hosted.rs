@@ -461,7 +461,7 @@ impl Wifi for WifiImpl {
     }
 
     fn status(&mut self) -> NetworkResult<u8> {
-        Ok(1)
+        Ok(4)
     }
 
     fn disconnect(self) -> NetworkResult<()> {
@@ -478,6 +478,10 @@ impl Wifi for WifiImpl {
 
     fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()> {
         Ok(())
+    }
+
+    fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>> {
+        Ok(Box::new([]))
     }
 
     fn tcp_close(&mut self) -> NetworkResult<()> {

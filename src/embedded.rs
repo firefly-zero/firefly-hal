@@ -714,6 +714,18 @@ impl Wifi for WifiImpl {
         Ok(())
     }
 
+    fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>> {
+        use firefly_types::spi::{Request, Response};
+        let req = Request::TcpRecv;
+        let raw = self.io.transfer(req)?;
+        let resp = self.io.decode(&raw)?;
+        let Response::TcpChunk(chunk) = resp else {
+            return Err(NetworkError::UnexpectedResp);
+        };
+        let chunk = Vec::from(chunk).into_boxed_slice();
+        Ok(chunk)
+    }
+
     fn tcp_close(&mut self) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpClose;
