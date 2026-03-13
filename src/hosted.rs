@@ -223,6 +223,12 @@ impl Dir for DirImpl {
         }
     }
 
+    fn create_dir(self, name: &str) -> Result<(), FSError> {
+        let path = self.path.join(name);
+        std::fs::create_dir(path)?;
+        Ok(())
+    }
+
     fn remove_dir(self) -> Result<(), FSError> {
         let res = std::fs::remove_dir_all(&self.path);
         match res {

@@ -242,10 +242,13 @@ pub trait Dir {
 
     /// Delete the given file if exists.
     ///
-    /// Directories cannot be removed.
-    ///
     /// Returns false only if there is an error.
     fn remove_file(&mut self, name: &str) -> Result<(), FSError>;
+
+    /// Create a new empty sub-directory.
+    ///
+    /// Returns `DirAlreadyExists` if directory already exists.
+    fn create_dir(self, name: &str) -> Result<(), FSError>;
 
     /// Remove the directory and all its contents.
     fn remove_dir(self) -> Result<(), FSError>;
