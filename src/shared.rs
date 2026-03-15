@@ -248,7 +248,7 @@ pub trait Dir {
     /// Create a new empty sub-directory.
     ///
     /// Returns `DirAlreadyExists` if directory already exists.
-    fn create_dir(self, name: &str) -> Result<(), FSError>;
+    fn create_dir(&mut self, name: &str) -> Result<(), FSError>;
 
     /// Remove the directory and all its contents.
     fn remove_dir(self) -> Result<(), FSError>;

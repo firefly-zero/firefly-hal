@@ -223,7 +223,7 @@ impl Dir for DirImpl {
         }
     }
 
-    fn create_dir(self, name: &str) -> Result<(), FSError> {
+    fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
         let path = self.path.join(name);
         std::fs::create_dir(path)?;
         Ok(())

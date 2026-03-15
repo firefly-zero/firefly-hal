@@ -301,7 +301,7 @@ impl Dir for DirImpl {
         Ok(())
     }
 
-    fn create_dir(self, name: &str) -> Result<(), FSError> {
+    fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
         let manager = &self.vm.borrow();
         let dir = self.dir.to_directory(manager);
         dir.make_dir_in_dir(name)?;
