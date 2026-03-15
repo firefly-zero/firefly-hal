@@ -311,12 +311,18 @@ impl Dir for DirImpl {
     fn remove_dir(self) -> Result<(), FSError> {
         let manager = &self.vm.borrow();
         let dir = self.dir.to_directory(manager);
-        // TODO: Replace with `delete_file_in_dir`
-        //      when embedded-sdmmc 0.10.0 is released.
-        //      https://github.com/rust-embedded-community/embedded-sdmmc-rs/pull/210
+        let mut names = Vec::new();
         dir.iterate_dir(|entry| {
-            let _ = dir.delete_file_in_dir(&entry.name);
+            let name_str = entry.name.to_string();
+            if &name_str != "." && &name_str != ".." {
+                names.push(entry.name.clone());
+            }
         })?;
+        for name in names {
+            dir.delete_file_in_dir(&name)?;
+        }
+        // TODO: Add `delete_file_in_dir` when embedded-sdmmc 0.10.0 is released.
+        //      https://github.com/rust-embedded-community/embedded-sdmmc-rs/pull/210
         Ok(())
     }
 
