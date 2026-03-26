@@ -6,7 +6,7 @@ use core::fmt::Display;
 use core::marker::PhantomData;
 use core::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream, UdpSocket};
+use std::net::{SocketAddrV4, TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -58,6 +58,7 @@ pub struct DeviceImpl<'a> {
     wifi_status: u8,
     network: NetworkImpl<'a>,
     serial: SerialImpl,
+    tcp_conn: Option<TcpStream>,
 }
 
 impl<'a> DeviceImpl<'a> {
@@ -74,6 +75,7 @@ impl<'a> DeviceImpl<'a> {
             wifi_status: 2,
             network: NetworkImpl::new(),
             serial: SerialImpl::new(),
+            tcp_conn: None,
         }
     }
 
@@ -458,22 +460,62 @@ impl Wifi for DeviceImpl<'_> {
     }
 
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
+        if self.wifi_status != 4 {
+            return Err(NetworkError::Error("not connected to wifi"));
+        }
+        let ip = Ipv4Addr::new(
+            (ip >> 24) as u8,
+            (ip >> 16) as u8,
+            (ip >> 8) as u8,
+            ip as u8,
+        );
+        let addr = SocketAddrV4::new(ip, port);
+        let Ok(stream) = TcpStream::connect(addr) else {
+            return Err(NetworkError::CannotBind);
+        };
+        self.tcp_conn = Some(stream);
         Ok(())
     }
 
     fn tcp_status(&mut self) -> NetworkResult<u8> {
+        let Some(stream) = &mut self.tcp_conn else {
+            return Ok(1);
+        };
+        if stream.peer_addr().is_err() {
+            return Ok(1);
+        }
         Ok(5)
     }
 
     fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()> {
+        let Some(stream) = &mut self.tcp_conn else {
+            return Err(NetworkError::NotInitialized);
+        };
+        let res = stream.write_all(data);
+        if let Err(err) = res {
+            let err = alloc::format!("{err}");
+            return Err(NetworkError::OwnedError(err));
+        }
         Ok(())
     }
 
     fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>> {
-        Ok(Box::new([]))
+        let Some(stream) = &mut self.tcp_conn else {
+            return Err(NetworkError::NotInitialized);
+        };
+        let mut buf = vec![0; 80];
+        let Ok(n) = stream.read(&mut buf) else {
+            return Err(NetworkError::Error("failed to read incoming TCP data"));
+        };
+        buf.truncate(n);
+        Ok(buf.into_boxed_slice())
     }
 
     fn tcp_close(&mut self) -> NetworkResult<()> {
+        let Some(stream) = self.tcp_conn.take() else {
+            return Ok(());
+        };
+        _ = stream.shutdown(std::net::Shutdown::Both);
         Ok(())
     }
 }
@@ -544,9 +586,8 @@ impl TcpWorker {
         let addrs: Vec<_> = (TCP_PORT_MIN..=TCP_PORT_MAX)
             .map(|port| SocketAddr::new(ip, port))
             .collect();
-        let socket = match TcpListener::bind(&addrs[..]) {
-            Ok(socket) => socket,
-            Err(_) => return Err(NetworkError::CannotBind),
+        let Ok(socket) = TcpListener::bind(&addrs[..]) else {
+            return Err(NetworkError::CannotBind);
         };
         socket.set_nonblocking(true).unwrap();
         std::thread::spawn(move || {
