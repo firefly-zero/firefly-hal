@@ -440,34 +440,41 @@ impl Serial for SerialImpl {
     }
 }
 
-pub struct WifiImpl {}
+pub struct WifiImpl {
+    status: u8,
+}
 
 impl WifiImpl {
     pub fn new() -> Self {
-        Self {}
+        Self { status: 2 }
     }
 }
 
 impl Wifi for WifiImpl {
     fn scan(&mut self) -> NetworkResult<[String; 6]> {
-        let points = [
-            "Bad Omens",
-            "FGBGFM",
-            "the death of peace of mind",
-            "Concrete Jungle",
-            "Specter",
-            "Dying to love",
-        ];
+        let points = ["Default Network", "", "", "", "", ""];
         let points = points.map(|s| s.to_string());
         Ok(points)
     }
 
-    fn connect(&mut self, _ssid: &str, _pass: &str) -> NetworkResult<()> {
+    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
+        if ssid != "Default Network" {
+            self.status = 2; // disconnected
+        } else if pass == "invalid" {
+            self.status = 1; // error
+        } else {
+            self.status = 3; // initializing
+        }
         Ok(())
     }
 
     fn status(&mut self) -> NetworkResult<u8> {
-        Ok(4)
+        if self.status == 3 {
+            self.status = 4; // connected
+            Ok(3)
+        } else {
+            Ok(self.status)
+        }
     }
 
     fn disconnect(self) -> NetworkResult<()> {
