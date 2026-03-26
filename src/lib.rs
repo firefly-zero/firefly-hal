@@ -22,6 +22,6 @@ mod gamepad;
 #[cfg(not(target_os = "none"))]
 pub use device::DeviceConfig;
 
-pub use device::{Addr, DeviceImpl, DirImpl, NetworkImpl, SerialImpl, WifiImpl};
+pub use device::{Addr, DeviceImpl, DirImpl};
 pub use errors::*;
 pub use shared::*;

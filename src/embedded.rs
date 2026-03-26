@@ -49,25 +49,25 @@ impl DeviceImpl<'_> {
         let volume = volume.to_raw_volume();
 
         let io_uart = Rc::new(RefCell::new(io_uart));
-        let mut io = FireflyIO { uart: io_uart };
+        let mut device = Self {
+            delay: Delay::new(),
+            volume,
+            vm: Rc::new(RefCell::new(volume_manager)),
+            io_uart,
+            usb_serial: Rc::new(RefCell::new(usb_serial)),
+            addr: Default::default(),
+            rng,
+            _life: &PhantomData,
+        };
+
         let req = firefly_types::spi::Request::NetLocalAddr;
-        let raw = io.transfer(req)?;
-        let resp = io.decode(&raw)?;
-        let addr = match resp {
+        let raw = device.io_transfer(req)?;
+        let resp = device.io_decode(&raw)?;
+        device.addr = match resp {
             firefly_types::spi::Response::NetLocalAddr(addr) => addr,
             _ => return Err(NetworkError::UnexpectedResp),
         };
 
-        let device = Self {
-            delay: Delay::new(),
-            volume,
-            vm: Rc::new(RefCell::new(volume_manager)),
-            io_uart: io.uart,
-            usb_serial: Rc::new(RefCell::new(usb_serial)),
-            addr,
-            rng,
-            _life: &PhantomData,
-        };
         Ok(device)
     }
 
@@ -135,9 +135,6 @@ fn open_file(
 }
 
 impl<'a> Device for DeviceImpl<'a> {
-    type Network = NetworkImpl<'a>;
-    type Wifi = WifiImpl;
-    type Serial = SerialImpl;
     type Dir = DirImpl;
 
     fn now(&self) -> Instant {
@@ -154,15 +151,12 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn read_input(&mut self) -> Option<InputState> {
         use firefly_types::spi::*;
-        let mut io = FireflyIO {
-            uart: Rc::clone(&self.io_uart),
-        };
         let req = Request::ReadInput;
-        let Ok(raw) = io.transfer(req) else {
+        let Ok(raw) = self.io_transfer(req) else {
             // TODO: here and below, log the error
             return None;
         };
-        let Ok(resp) = io.decode(&raw) else {
+        let Ok(resp) = self.io_decode(&raw) else {
             return None;
         };
         match resp {
@@ -201,30 +195,6 @@ impl<'a> Device for DeviceImpl<'a> {
             dir,
             vm: self.vm.clone(),
         })
-    }
-
-    fn network(&mut self) -> Self::Network {
-        NetworkImpl {
-            io: FireflyIO {
-                uart: Rc::clone(&self.io_uart),
-            },
-            addr: self.addr,
-            _life: &PhantomData,
-        }
-    }
-
-    fn wifi(&mut self) -> Self::Wifi {
-        WifiImpl {
-            io: FireflyIO {
-                uart: Rc::clone(&self.io_uart),
-            },
-        }
-    }
-
-    fn serial(&self) -> Self::Serial {
-        SerialImpl {
-            usb_serial: Rc::clone(&self.usb_serial),
-        }
     }
 
     fn has_headphones(&mut self) -> bool {
@@ -464,14 +434,13 @@ impl Drop for FileR {
     }
 }
 
-struct FireflyIO {
-    uart: Rc<RefCell<IoUart>>,
-}
-
-impl FireflyIO {
-    /// Send request and read response.
-    fn transfer(&mut self, req: firefly_types::spi::Request<'_>) -> Result<Vec<u8>, NetworkError> {
-        let mut uart = self.uart.borrow_mut();
+impl DeviceImpl<'_> {
+    /// Send request to the firefly-io chip and read response.
+    fn io_transfer(
+        &mut self,
+        req: firefly_types::spi::Request<'_>,
+    ) -> Result<Vec<u8>, NetworkError> {
+        let mut uart = self.io_uart.borrow_mut();
 
         // send request
         let mut raw = req.encode_vec()?;
@@ -492,9 +461,9 @@ impl FireflyIO {
         Ok(raw)
     }
 
-    /// Send request without reading response.
-    fn send(&mut self, req: firefly_types::spi::Request<'_>) -> Result<(), NetworkError> {
-        let mut uart = self.uart.borrow_mut();
+    /// Send request to the firefly-io chip without reading response.
+    fn io_send(&mut self, req: firefly_types::spi::Request<'_>) -> Result<(), NetworkError> {
+        let mut uart = self.io_uart.borrow_mut();
         let raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
@@ -504,7 +473,8 @@ impl FireflyIO {
         Ok(())
     }
 
-    fn decode<'b>(&self, raw: &'b [u8]) -> NetworkResult<firefly_types::spi::Response<'b>> {
+    /// Parse response from the firefly-io chip.
+    fn io_decode<'b>(&self, raw: &'b [u8]) -> NetworkResult<firefly_types::spi::Response<'b>> {
         use firefly_types::spi::Response;
         if raw.is_empty() {
             return Err(NetworkError::Error("buffer is empty, cannot decode"));
@@ -517,55 +487,49 @@ impl FireflyIO {
     }
 }
 
-pub struct NetworkImpl<'a> {
-    io: FireflyIO,
-    addr: Addr,
-    _life: &'a PhantomData<()>,
-}
-
 pub type Addr = [u8; 6];
 
-impl Network for NetworkImpl<'_> {
+impl Network for DeviceImpl<'_> {
     type Addr = Addr;
 
-    fn start(&mut self) -> NetworkResult<()> {
+    fn net_start(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetStart;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != firefly_types::spi::Response::NetStarted {
             return Err(NetworkError::UnexpectedResp);
         }
         Ok(())
     }
 
-    fn stop(&mut self) -> NetworkResult<()> {
+    fn net_stop(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetStop;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != firefly_types::spi::Response::NetStopped {
             return Err(NetworkError::UnexpectedResp);
         }
         Ok(())
     }
 
-    fn local_addr(&self) -> Self::Addr {
+    fn net_local_addr(&self) -> Self::Addr {
         self.addr
     }
 
-    fn advertise(&mut self) -> NetworkResult<()> {
+    fn net_advertise(&mut self) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetAdvertise;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != firefly_types::spi::Response::NetAdvertised {
             return Err(NetworkError::UnexpectedResp);
         }
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
+    fn net_recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
         let req = firefly_types::spi::Request::NetRecv;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         use firefly_types::spi::Response::*;
         match resp {
             NetIncoming(addr, msg) => {
@@ -577,16 +541,19 @@ impl Network for NetworkImpl<'_> {
         }
     }
 
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+    fn net_send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
         let req = firefly_types::spi::Request::NetSend(addr, data);
-        self.io.send(req)?;
+        self.io_send(req)?;
         Ok(())
     }
 
-    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
+    fn net_send_status(
+        &mut self,
+        addr: Self::Addr,
+    ) -> NetworkResult<firefly_types::spi::SendStatus> {
         let req = firefly_types::spi::Request::NetSendStatus(addr);
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         use firefly_types::spi::Response::*;
         match resp {
             NetSendStatus(status) => Ok(status),
@@ -595,20 +562,16 @@ impl Network for NetworkImpl<'_> {
     }
 }
 
-pub struct SerialImpl {
-    usb_serial: Rc<RefCell<UsbSerialJtag<'static, Blocking>>>,
-}
-
-impl Serial for SerialImpl {
-    fn start(&mut self) -> NetworkResult<()> {
+impl Serial for DeviceImpl<'_> {
+    fn serial_start(&mut self) -> NetworkResult<()> {
         Ok(())
     }
 
-    fn stop(&mut self) -> NetworkResult<()> {
+    fn serial_stop(&mut self) -> NetworkResult<()> {
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
+    fn serial_recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
         let mut usb = self.usb_serial.borrow_mut();
         let mut buf = Vec::new();
         while let Ok(byte) = usb.read_byte() {
@@ -620,7 +583,7 @@ impl Serial for SerialImpl {
         Ok(Some(buf.into_boxed_slice()))
     }
 
-    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+    fn serial_send(&mut self, data: &[u8]) -> NetworkResult<()> {
         let mut usb = self.usb_serial.borrow_mut();
         send_to_serial(&mut usb, data);
         Ok(())
@@ -643,16 +606,12 @@ fn send_to_serial(usb: &mut UsbSerialJtag<'static, Blocking>, data: &[u8]) {
     _ = usb.flush_tx_nb();
 }
 
-pub struct WifiImpl {
-    io: FireflyIO,
-}
-
-impl Wifi for WifiImpl {
-    fn scan(&mut self) -> NetworkResult<[String; 6]> {
+impl Wifi for DeviceImpl<'_> {
+    fn wifi_scan(&mut self) -> NetworkResult<[String; 6]> {
         use firefly_types::spi::{Request, Response};
         let req = Request::WifiScan;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         let Response::WifiScan(points) = resp else {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -660,11 +619,11 @@ impl Wifi for WifiImpl {
         Ok(points)
     }
 
-    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
+    fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::WifiConnect(ssid, pass);
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         match resp {
             Response::WifiConnected => Ok(()),
             Response::Error(msg) => Err(NetworkError::OwnedError(msg.to_string())),
@@ -672,22 +631,22 @@ impl Wifi for WifiImpl {
         }
     }
 
-    fn status(&mut self) -> NetworkResult<u8> {
+    fn wifi_status(&mut self) -> NetworkResult<u8> {
         use firefly_types::spi::{Request, Response};
         let req = Request::WifiStatus;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         let Response::WifiStatus(status) = resp else {
             return Err(NetworkError::UnexpectedResp);
         };
         Ok(status)
     }
 
-    fn disconnect(mut self) -> NetworkResult<()> {
+    fn wifi_disconnect(&mut self) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::WifiDisconnect;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != Response::WifiDisconnected {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -697,8 +656,8 @@ impl Wifi for WifiImpl {
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpConnect(ip, port);
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != Response::TcpConnected {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -708,8 +667,8 @@ impl Wifi for WifiImpl {
     fn tcp_status(&mut self) -> NetworkResult<u8> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpStatus;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         let Response::TcpStatus(status) = resp else {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -719,8 +678,8 @@ impl Wifi for WifiImpl {
     fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpSend(data);
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != Response::TcpSent {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -730,8 +689,8 @@ impl Wifi for WifiImpl {
     fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpRecv;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         let Response::TcpChunk(chunk) = resp else {
             return Err(NetworkError::UnexpectedResp);
         };
@@ -742,8 +701,8 @@ impl Wifi for WifiImpl {
     fn tcp_close(&mut self) -> NetworkResult<()> {
         use firefly_types::spi::{Request, Response};
         let req = Request::TcpClose;
-        let raw = self.io.transfer(req)?;
-        let resp = self.io.decode(&raw)?;
+        let raw = self.io_transfer(req)?;
+        let resp = self.io_decode(&raw)?;
         if resp != Response::TcpClosed {
             return Err(NetworkError::UnexpectedResp);
         };

@@ -55,7 +55,9 @@ pub struct DeviceImpl<'a> {
     gamepad: GamepadManager,
     /// The audio buffer
     audio: Option<AudioWriter>,
-    _life: &'a PhantomData<()>,
+    wifi_status: u8,
+    network: NetworkImpl<'a>,
+    serial: SerialImpl,
 }
 
 impl<'a> DeviceImpl<'a> {
@@ -69,7 +71,9 @@ impl<'a> DeviceImpl<'a> {
             gamepad: GamepadManager::new(),
             audio,
             config,
-            _life: &PhantomData,
+            wifi_status: 2,
+            network: NetworkImpl::new(),
+            serial: SerialImpl::new(),
         }
     }
 
@@ -84,9 +88,6 @@ impl<'a> DeviceImpl<'a> {
 }
 
 impl<'a> Device for DeviceImpl<'a> {
-    type Network = NetworkImpl<'a>;
-    type Wifi = WifiImpl;
-    type Serial = SerialImpl;
     type Dir = DirImpl;
 
     fn now(&self) -> Instant {
@@ -160,18 +161,6 @@ impl<'a> Device for DeviceImpl<'a> {
             connected: state == battery::State::Charging,
             full: state == battery::State::Full,
         })
-    }
-
-    fn network(&mut self) -> Self::Network {
-        NetworkImpl::new(self.config.clone())
-    }
-
-    fn wifi(&mut self) -> Self::Wifi {
-        WifiImpl::new()
-    }
-
-    fn serial(&self) -> Self::Serial {
-        SerialImpl::new(self.config.tcp_ip)
     }
 }
 
@@ -288,7 +277,6 @@ impl embedded_io::Write for File {
 }
 
 pub struct NetworkImpl<'a> {
-    config: DeviceConfig,
     worker: Cell<Option<UdpWorker>>,
     r_in: mpsc::Receiver<NetMessage>,
     s_out: mpsc::Sender<NetMessage>,
@@ -298,7 +286,7 @@ pub struct NetworkImpl<'a> {
 }
 
 impl<'a> NetworkImpl<'a> {
-    fn new(config: DeviceConfig) -> Self {
+    fn new() -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
         let (s_stop, r_stop) = mpsc::channel();
@@ -308,7 +296,6 @@ impl<'a> NetworkImpl<'a> {
             r_stop,
         }));
         Self {
-            config,
             worker,
             r_in,
             s_out,
@@ -321,35 +308,35 @@ impl<'a> NetworkImpl<'a> {
 
 pub type Addr = SocketAddr;
 
-impl<'a> Network for NetworkImpl<'a> {
+impl<'a> Network for DeviceImpl<'a> {
     type Addr = SocketAddr;
 
-    fn local_addr(&self) -> SocketAddr {
-        self.local_addr.unwrap()
+    fn net_local_addr(&self) -> SocketAddr {
+        self.network.local_addr.unwrap()
     }
 
-    fn start(&mut self) -> NetworkResult<()> {
-        let worker = self.worker.replace(None);
+    fn net_start(&mut self) -> NetworkResult<()> {
+        let worker = self.network.worker.replace(None);
         let Some(worker) = worker else {
-            return Err(NetworkError::AlreadyInitialized);
+            return Ok(());
         };
         let local_addr = worker.start(self.config.udp_ip)?;
-        self.local_addr = Some(local_addr);
+        self.network.local_addr = Some(local_addr);
         Ok(())
     }
 
-    fn stop(&mut self) -> NetworkResult<()> {
-        _ = self.s_stop.send(());
+    fn net_stop(&mut self) -> NetworkResult<()> {
+        _ = self.network.s_stop.send(());
         Ok(())
     }
 
-    fn advertise(&mut self) -> NetworkResult<()> {
+    fn net_advertise(&mut self) -> NetworkResult<()> {
         let hello = b"HELLO".to_owned();
         let hello: Box<[u8]> = Box::new(hello);
         for ip in &self.config.peers {
             for port in UDP_PORT_MIN..=UDP_PORT_MAX {
                 let addr = SocketAddr::new(*ip, port);
-                let res = self.s_out.send((addr, hello.clone()));
+                let res = self.network.s_out.send((addr, hello.clone()));
                 if res.is_err() {
                     return Err(NetworkError::NetThreadDeallocated);
                 }
@@ -358,29 +345,28 @@ impl<'a> Network for NetworkImpl<'a> {
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
-        Ok(self.r_in.try_recv().ok())
+    fn net_recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
+        Ok(self.network.r_in.try_recv().ok())
     }
 
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
+    fn net_send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()> {
         if data.len() >= 200 {
             return Err(NetworkError::OutMessageTooBig);
         };
         let msg = data.to_vec().into_boxed_slice();
-        let res = self.s_out.send((addr, msg));
+        let res = self.network.s_out.send((addr, msg));
         if res.is_err() {
             return Err(NetworkError::NetThreadDeallocated);
         }
         Ok(())
     }
 
-    fn send_status(&mut self, _: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
+    fn net_send_status(&mut self, _: Self::Addr) -> NetworkResult<firefly_types::spi::SendStatus> {
         Ok(firefly_types::spi::SendStatus::Empty)
     }
 }
 
 pub struct SerialImpl {
-    ip: IpAddr,
     worker: Cell<Option<TcpWorker>>,
     r_in: mpsc::Receiver<SerialMessage>,
     s_out: mpsc::Sender<SerialMessage>,
@@ -388,7 +374,7 @@ pub struct SerialImpl {
 }
 
 impl SerialImpl {
-    fn new(ip: IpAddr) -> Self {
+    fn new() -> Self {
         let (s_in, r_in) = mpsc::channel();
         let (s_out, r_out) = mpsc::channel();
         let (s_stop, r_stop) = mpsc::channel();
@@ -399,7 +385,6 @@ impl SerialImpl {
         };
         let worker = Cell::new(Some(worker));
         Self {
-            ip,
             worker,
             r_in,
             s_out,
@@ -408,31 +393,31 @@ impl SerialImpl {
     }
 }
 
-impl Serial for SerialImpl {
-    fn start(&mut self) -> NetworkResult<()> {
-        let worker = self.worker.replace(None);
+impl Serial for DeviceImpl<'_> {
+    fn serial_start(&mut self) -> NetworkResult<()> {
+        let worker = self.serial.worker.replace(None);
         let Some(worker) = worker else {
-            return Err(NetworkError::AlreadyInitialized);
+            return Ok(());
         };
-        worker.start(self.ip)?;
+        worker.start(self.config.tcp_ip)?;
         Ok(())
     }
 
-    fn stop(&mut self) -> NetworkResult<()> {
-        _ = self.s_stop.send(());
+    fn serial_stop(&mut self) -> NetworkResult<()> {
+        _ = self.serial.s_stop.send(());
         Ok(())
     }
 
-    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
-        Ok(self.r_in.try_recv().ok())
+    fn serial_recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
+        Ok(self.serial.r_in.try_recv().ok())
     }
 
-    fn send(&mut self, data: &[u8]) -> NetworkResult<()> {
+    fn serial_send(&mut self, data: &[u8]) -> NetworkResult<()> {
         if data.len() >= 200 {
             return Err(NetworkError::OutMessageTooBig);
         };
         let msg = data.to_vec().into_boxed_slice();
-        let res = self.s_out.send(msg);
+        let res = self.serial.s_out.send(msg);
         if res.is_err() {
             return Err(NetworkError::NetThreadDeallocated);
         }
@@ -440,44 +425,35 @@ impl Serial for SerialImpl {
     }
 }
 
-pub struct WifiImpl {
-    status: u8,
-}
-
-impl WifiImpl {
-    pub fn new() -> Self {
-        Self { status: 2 }
-    }
-}
-
-impl Wifi for WifiImpl {
-    fn scan(&mut self) -> NetworkResult<[String; 6]> {
+impl Wifi for DeviceImpl<'_> {
+    fn wifi_scan(&mut self) -> NetworkResult<[String; 6]> {
         let points = ["Default Network", "", "", "", "", ""];
         let points = points.map(|s| s.to_string());
         Ok(points)
     }
 
-    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
+    fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
         if ssid != "Default Network" {
-            self.status = 2; // disconnected
+            self.wifi_status = 2; // disconnected
         } else if pass == "invalid" {
-            self.status = 1; // error
+            self.wifi_status = 1; // error
         } else {
-            self.status = 3; // initializing
+            self.wifi_status = 3; // initializing
         }
         Ok(())
     }
 
-    fn status(&mut self) -> NetworkResult<u8> {
-        if self.status == 3 {
-            self.status = 4; // connected
+    fn wifi_status(&mut self) -> NetworkResult<u8> {
+        if self.wifi_status == 3 {
+            self.wifi_status = 4; // connected
             Ok(3)
         } else {
-            Ok(self.status)
+            Ok(self.wifi_status)
         }
     }
 
-    fn disconnect(self) -> NetworkResult<()> {
+    fn wifi_disconnect(&mut self) -> NetworkResult<()> {
+        self.wifi_status = 2;
         Ok(())
     }
 

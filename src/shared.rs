@@ -90,10 +90,7 @@ impl SubAssign for Duration {
     }
 }
 
-pub trait Device {
-    type Network: Network;
-    type Wifi: Wifi;
-    type Serial: Serial;
+pub trait Device: Network + Serial + Wifi {
     type Dir: Dir;
 
     /// The current time.
@@ -140,15 +137,6 @@ pub trait Device {
 
     fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError>;
 
-    fn network(&mut self) -> Self::Network;
-
-    fn wifi(&mut self) -> Self::Wifi;
-
-    /// Access the USB serial port.
-    ///
-    /// Both read and write operations are non-blocking.
-    fn serial(&self) -> Self::Serial;
-
     /// Returns true if headphones are connected.
     fn has_headphones(&mut self) -> bool;
 
@@ -167,36 +155,36 @@ pub trait Network {
     type Addr: Ord;
 
     /// Start accepting incoming network connections from other peers.
-    fn start(&mut self) -> NetworkResult<()>;
+    fn net_start(&mut self) -> NetworkResult<()>;
 
     /// Stop accepting incoming network connections from other peers.
-    fn stop(&mut self) -> NetworkResult<()>;
+    fn net_stop(&mut self) -> NetworkResult<()>;
 
     /// Network address of the current device as visible to the other peers.
     ///
     /// Used to sort all the peers, including the local one, in the same order
     /// on all devices.
-    fn local_addr(&self) -> Self::Addr;
+    fn net_local_addr(&self) -> Self::Addr;
 
     /// Broadcast device presence to all other devices nearby.
-    fn advertise(&mut self) -> NetworkResult<()>;
+    fn net_advertise(&mut self) -> NetworkResult<()>;
 
     /// Get a pending message, if any. Non-blocking.
     #[expect(clippy::type_complexity)]
-    fn recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>>;
+    fn net_recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>>;
 
     /// Send a raw message to the given device. Non-blocking.
-    fn send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
+    fn net_send(&mut self, addr: Self::Addr, data: &[u8]) -> NetworkResult<()>;
 
     /// Send a raw message to the given device. Non-blocking.
-    fn send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
+    fn net_send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
 }
 
 pub trait Wifi {
-    fn scan(&mut self) -> NetworkResult<[String; 6]>;
-    fn connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()>;
-    fn status(&mut self) -> NetworkResult<u8>;
-    fn disconnect(self) -> NetworkResult<()>;
+    fn wifi_scan(&mut self) -> NetworkResult<[String; 6]>;
+    fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()>;
+    fn wifi_status(&mut self) -> NetworkResult<u8>;
+    fn wifi_disconnect(&mut self) -> NetworkResult<()>;
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()>;
     fn tcp_status(&mut self) -> NetworkResult<u8>;
     fn tcp_send(&mut self, data: &[u8]) -> NetworkResult<()>;
@@ -264,11 +252,12 @@ pub trait Dir {
         F: FnMut(EntryKind, &[u8]);
 }
 
+/// Access the USB serial port.
 pub trait Serial {
-    fn start(&mut self) -> NetworkResult<()>;
-    fn stop(&mut self) -> NetworkResult<()>;
-    fn recv(&mut self) -> NetworkResult<Option<Box<[u8]>>>;
-    fn send(&mut self, data: &[u8]) -> NetworkResult<()>;
+    fn serial_start(&mut self) -> NetworkResult<()>;
+    fn serial_stop(&mut self) -> NetworkResult<()>;
+    fn serial_recv(&mut self) -> NetworkResult<Option<Box<[u8]>>>;
+    fn serial_send(&mut self, data: &[u8]) -> NetworkResult<()>;
 }
 
 #[derive(PartialEq, Copy, Clone)]
