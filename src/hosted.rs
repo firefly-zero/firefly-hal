@@ -107,11 +107,11 @@ impl<'a> Device for DeviceImpl<'a> {
         self.gamepad.read_input()
     }
 
-    fn log_debug<D: Display>(&self, src: &str, msg: D) {
+    fn log_debug<D: Display>(&mut self, src: &str, msg: D) {
         println!("DEBUG({src}): {msg}");
     }
 
-    fn log_error<D: Display>(&self, src: &str, msg: D) {
+    fn log_error<D: Display>(&mut self, src: &str, msg: D) {
         eprintln!("ERROR({src}): {msg}");
     }
 

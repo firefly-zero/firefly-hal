@@ -122,7 +122,7 @@ pub trait Device: Network + Serial + Wifi {
     /// On embedded systems, use [defmt].
     ///
     /// [defmt]: https://defmt.ferrous-systems.com/introduction
-    fn log_debug<D: Display>(&self, src: &str, msg: D);
+    fn log_debug<D: Display>(&mut self, src: &str, msg: D);
 
     /// Log an error into console.
     ///
@@ -130,7 +130,7 @@ pub trait Device: Network + Serial + Wifi {
     /// On embedded systems, use [defmt].
     ///
     /// [defmt]: https://defmt.ferrous-systems.com/introduction
-    fn log_error<D: Display>(&self, src: &str, msg: D);
+    fn log_error<D: Display>(&mut self, src: &str, msg: D);
 
     /// Get a random number.
     fn random(&mut self) -> u32;

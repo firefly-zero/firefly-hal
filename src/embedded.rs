@@ -27,8 +27,8 @@ pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
-    io_uart: Rc<RefCell<IoUart>>,
-    usb_serial: Rc<RefCell<UsbSerialJtag<'static, Blocking>>>,
+    io_uart: IoUart,
+    usb_serial: UsbSerialJtag<'static, Blocking>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
@@ -48,13 +48,12 @@ impl DeviceImpl<'_> {
         };
         let volume = volume.to_raw_volume();
 
-        let io_uart = Rc::new(RefCell::new(io_uart));
         let mut device = Self {
             delay: Delay::new(),
             volume,
             vm: Rc::new(RefCell::new(volume_manager)),
             io_uart,
-            usb_serial: Rc::new(RefCell::new(usb_serial)),
+            usb_serial,
             addr: Default::default(),
             rng,
             _life: &PhantomData,
@@ -71,11 +70,10 @@ impl DeviceImpl<'_> {
         Ok(device)
     }
 
-    fn log(&self, msg: &str) {
+    fn log(&mut self, msg: &str) {
         let msg = firefly_types::serial::Response::Log(msg.to_string());
         let raw = msg.encode_vec().unwrap();
-        let mut usb = self.usb_serial.borrow_mut();
-        send_to_serial(&mut usb, &raw);
+        send_to_serial(&mut self.usb_serial, &raw);
     }
 
     pub fn alloc_psram(&self, size: usize) -> Vec<u8, esp_alloc::ExternalMemory> {
@@ -169,12 +167,12 @@ impl<'a> Device for DeviceImpl<'a> {
         }
     }
 
-    fn log_debug<D: core::fmt::Display>(&self, src: &str, msg: D) {
+    fn log_debug<D: core::fmt::Display>(&mut self, src: &str, msg: D) {
         let msg = alloc::format!("DEBUG({src}): {msg}");
         self.log(&msg);
     }
 
-    fn log_error<D: core::fmt::Display>(&self, src: &str, msg: D) {
+    fn log_error<D: core::fmt::Display>(&mut self, src: &str, msg: D) {
         let msg = alloc::format!("ERROR({src}): {msg}");
         self.log(&msg);
     }
@@ -440,36 +438,33 @@ impl DeviceImpl<'_> {
         &mut self,
         req: firefly_types::spi::Request<'_>,
     ) -> Result<Vec<u8>, NetworkError> {
-        let mut uart = self.io_uart.borrow_mut();
-
         // send request
         let mut raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
-        uart.write(&[size])?;
-        uart.write(&raw[..])?;
+        self.io_uart.write(&[size])?;
+        self.io_uart.write(&raw[..])?;
 
         // read response
-        uart.read(&mut raw[..1])?;
+        self.io_uart.read(&mut raw[..1])?;
         let size = usize::from(raw[0]);
         if size == 0 {
             return Err(NetworkError::Error("received zero-sized message"));
         }
         raw.resize(size, 0);
-        uart.read_exact(&mut raw[..])?;
+        self.io_uart.read_exact(&mut raw[..])?;
         Ok(raw)
     }
 
     /// Send request to the firefly-io chip without reading response.
     fn io_send(&mut self, req: firefly_types::spi::Request<'_>) -> Result<(), NetworkError> {
-        let mut uart = self.io_uart.borrow_mut();
         let raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
         };
-        uart.write(&[size])?;
-        uart.write(&raw[..])?;
+        self.io_uart.write(&[size])?;
+        self.io_uart.write(&raw[..])?;
         Ok(())
     }
 
@@ -572,9 +567,8 @@ impl Serial for DeviceImpl<'_> {
     }
 
     fn serial_recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
-        let mut usb = self.usb_serial.borrow_mut();
         let mut buf = Vec::new();
-        while let Ok(byte) = usb.read_byte() {
+        while let Ok(byte) = self.usb_serial.read_byte() {
             buf.push(byte);
         }
         if buf.is_empty() {
@@ -584,8 +578,7 @@ impl Serial for DeviceImpl<'_> {
     }
 
     fn serial_send(&mut self, data: &[u8]) -> NetworkResult<()> {
-        let mut usb = self.usb_serial.borrow_mut();
-        send_to_serial(&mut usb, data);
+        send_to_serial(&mut self.usb_serial, data);
         Ok(())
     }
 }
