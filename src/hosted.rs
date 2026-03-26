@@ -473,6 +473,7 @@ impl Wifi for DeviceImpl<'_> {
         let Ok(stream) = TcpStream::connect(addr) else {
             return Err(NetworkError::CannotBind);
         };
+        _ = stream.set_nonblocking(true);
         self.tcp_conn = Some(stream);
         Ok(())
     }
@@ -504,8 +505,15 @@ impl Wifi for DeviceImpl<'_> {
             return Err(NetworkError::NotInitialized);
         };
         let mut buf = vec![0; 80];
-        let Ok(n) = stream.read(&mut buf) else {
-            return Err(NetworkError::Error("failed to read incoming TCP data"));
+        let n = match stream.read(&mut buf) {
+            Ok(n) => n,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    0
+                } else {
+                    return Err(NetworkError::Error("failed to read incoming TCP data"));
+                }
+            }
         };
         buf.truncate(n);
         Ok(buf.into_boxed_slice())
