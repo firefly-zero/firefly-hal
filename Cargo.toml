@@ -12,8 +12,6 @@ postcard = "1.1.3"
 
 # hosted
 [target.'cfg(not(any(target_os = "none", target_os = "android")))'.dependencies]
-# access system battery info
-starship-battery = "0.11.0"
 # read gamepad input
 gilrs = "0.11.1"
 # play audio through speakers

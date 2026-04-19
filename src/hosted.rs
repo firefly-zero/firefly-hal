@@ -151,17 +151,10 @@ impl<'a> Device for DeviceImpl<'a> {
 
     #[cfg(not(target_os = "android"))]
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
-        use battery::units::electric_potential::microvolt;
-        let manager = battery::Manager::new().ok()?;
-        let mut batteries = manager.batteries().ok()?;
-        let battery = batteries.next()?;
-        let battery = battery.ok()?;
-        let state = battery.state();
-        let voltage = battery.voltage().get::<microvolt>();
         Some(BatteryStatus {
-            voltage: voltage as u16,
-            connected: state == battery::State::Charging,
-            full: state == battery::State::Full,
+            voltage: 40_000,
+            connected: false,
+            full: false,
         })
     }
 }
@@ -554,27 +547,29 @@ impl UdpWorker {
             println!("listening a UDP port");
         }
         let local_addr = socket.local_addr().unwrap();
-        std::thread::spawn(move || loop {
-            match self.r_stop.try_recv() {
-                Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
-                    break;
+        std::thread::spawn(move || {
+            loop {
+                match self.r_stop.try_recv() {
+                    Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
+                        break;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
                 }
-                Err(mpsc::TryRecvError::Empty) => {}
-            }
-            let mut buf = vec![0; 64];
-            if let Ok((size, addr)) = socket.recv_from(&mut buf) {
-                if size == 0 {
-                    continue;
+                let mut buf = vec![0; 64];
+                if let Ok((size, addr)) = socket.recv_from(&mut buf) {
+                    if size == 0 {
+                        continue;
+                    }
+                    buf.truncate(size);
+                    let buf = buf.into_boxed_slice();
+                    _ = self.s_in.send((addr, buf));
                 }
-                buf.truncate(size);
-                let buf = buf.into_boxed_slice();
-                _ = self.s_in.send((addr, buf));
-            }
-            if let Ok((addr, buf)) = self.r_out.try_recv() {
-                if addr == local_addr {
-                    continue;
+                if let Ok((addr, buf)) = self.r_out.try_recv() {
+                    if addr == local_addr {
+                        continue;
+                    }
+                    _ = socket.send_to(&buf, addr);
                 }
-                _ = socket.send_to(&buf, addr);
             }
         });
         Ok(local_addr)
