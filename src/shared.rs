@@ -331,6 +331,7 @@ impl InputState {
 /// Contains only stats that can be accessed from the hardware.
 /// It's responsibility of firefly-runtime to calculate State of Charge
 /// and any other metrics it might need.
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct BatteryStatus {
     /// The current voltage of the battery.
     ///
