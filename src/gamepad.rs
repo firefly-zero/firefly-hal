@@ -63,6 +63,19 @@ impl GamepadManager {
 
 /// Read state of sticks and convert it into touchpad state.
 fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
+    if let Some(pad) = read_dpad(gamepad) {
+        return Some(pad);
+    }
+    if let Some(pad) = read_left_pad(gamepad) {
+        return Some(pad);
+    }
+    if let Some(pad) = read_right_pad(gamepad) {
+        return Some(pad);
+    }
+    None
+}
+
+fn read_dpad(gamepad: Gamepad<'_>) -> Option<Pad> {
     if gamepad.is_pressed(Button::DPadDown) {
         return Some(Pad { x: 0, y: -1000 });
     }
@@ -75,17 +88,37 @@ fn read_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
     if gamepad.is_pressed(Button::DPadRight) {
         return Some(Pad { x: 1000, y: 0 });
     }
+    None
+}
 
+fn read_left_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
     // Left stick works as pad only if it is pressed down.
+    //
+    // The only exceptions is Firefly Zero because
+    // it uses touchpad instead of stick and hence has no drift.
+    // Steam Controller, despite having two touchpads, by default uses
+    // stick for the left coordinate instead of the left touchpad.
+    //
+    // We don't check vendor ID for Firefly Zero because it's not settled yet.
+    // The dev version of the gamepad mode uses Flipper Devices Inc VID (0x37C1).
+    let is_precise = gamepad.product_id() == Some(0x1337);
     let pad_pressed =
         gamepad.is_pressed(Button::LeftTrigger) | gamepad.is_pressed(Button::LeftThumb);
-    if pad_pressed {
-        return make_point(
+    if is_precise || pad_pressed {
+        let maybe_point = make_point(
             gamepad.axis_data(Axis::LeftStickX),
             gamepad.axis_data(Axis::LeftStickY),
         );
+        let point = maybe_point?;
+        if is_precise && point.x == 0 && point.y == 0 {
+            return None;
+        }
+        return Some(point);
     };
+    None
+}
 
+fn read_right_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
     let pad = make_point(
         gamepad.axis_data(Axis::RightStickX),
         gamepad.axis_data(Axis::RightStickY),
