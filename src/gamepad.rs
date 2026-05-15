@@ -119,22 +119,36 @@ fn read_left_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
 }
 
 fn read_right_pad(gamepad: Gamepad<'_>) -> Option<Pad> {
-    let pad = make_point(
+    let point = make_point(
         gamepad.axis_data(Axis::RightStickX),
         gamepad.axis_data(Axis::RightStickY),
     );
-    // if right stick is pressed, treat it as pad
+    let point = point?;
+
+    // Right the stick stick is pressed, the pad is pressed.
     if gamepad.is_pressed(Button::RightThumb) {
-        return pad;
+        return Some(point);
     }
-    let Pad { x, y } = pad?;
-    let x_zero = (-50..=50).contains(&x);
-    let y_zero = (-50..=50).contains(&y);
-    // if right stick is resting, pad is not pressed
+
+    // Steam Controller is very precise. It can only produce x=0,y=0
+    // if the right touchpad is not touched. So, for any other value,
+    // we use that value as the pad.
+    let is_precise = gamepad.vendor_id() == Some(0x28de);
+    if is_precise {
+        if point.x == 0 && point.y == 0 {
+            return None;
+        }
+        return Some(point);
+    }
+
+    // For any other gamepad, the stick has a small deadzone in the middle
+    // to account for the stick drift.
+    let x_zero = (-50..=50).contains(&point.x);
+    let y_zero = (-50..=50).contains(&point.y);
     if x_zero && y_zero {
         return None;
     }
-    Some(Pad { x, y })
+    Some(point)
 }
 
 fn make_point(x: Option<&AxisData>, y: Option<&AxisData>) -> Option<Pad> {
