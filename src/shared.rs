@@ -314,6 +314,19 @@ impl InputState {
         self.buttons & 0b10000 > 0
     }
 
+    pub fn rotate(&mut self) {
+        if let Some(pad) = self.pad.as_mut() {
+            pad.x = -pad.x;
+            pad.y = -pad.y;
+        };
+        let mut btns = u8::from(self.menu());
+        btns = (btns << 1) | u8::from(self.s());
+        btns = (btns << 1) | u8::from(self.e());
+        btns = (btns << 1) | u8::from(self.w());
+        btns = (btns << 1) | u8::from(self.n());
+        self.buttons = btns;
+    }
+
     #[must_use]
     pub fn merge(&self, other: &Self) -> Self {
         Self {
