@@ -193,7 +193,7 @@ pub trait Wifi {
 }
 
 pub trait Dir {
-    type Read: embedded_io::Read;
+    type Read: embedded_io::Read + embedded_io::Seek;
     type Write: embedded_io::Write;
 
     /// Open a file for reading.

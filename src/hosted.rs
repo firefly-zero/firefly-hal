@@ -261,6 +261,17 @@ impl embedded_io::Read for File {
     }
 }
 
+impl embedded_io::Seek for File {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        let pos = match pos {
+            embedded_io::SeekFrom::Start(n) => std::io::SeekFrom::Start(n),
+            embedded_io::SeekFrom::End(n) => std::io::SeekFrom::End(n),
+            embedded_io::SeekFrom::Current(n) => std::io::SeekFrom::Current(n),
+        };
+        std::io::Seek::seek(&mut self.file, pos)
+    }
+}
+
 impl embedded_io::Write for File {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         std::io::Write::write(&mut self.file, buf)

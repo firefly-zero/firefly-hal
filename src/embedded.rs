@@ -424,6 +424,22 @@ impl embedded_io::Read for FileR {
         }
     }
 }
+impl embedded_io::Seek for FileR {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        let manager = &self.vm.borrow();
+        use embedded_io::SeekFrom::*;
+        let res = match pos {
+            Start(n) => manager.file_seek_from_start(self.file, n as u32),
+            End(n) => manager.file_seek_from_end(self.file, n as u32),
+            Current(n) => manager.file_seek_from_current(self.file, n as i32),
+        };
+        let res = res.and_then(|_| manager.file_offset(self.file));
+        match res {
+            Ok(size) => Ok(size as u64),
+            Err(_) => Err(embedded_io::ErrorKind::Other),
+        }
+    }
+}
 
 impl Drop for FileR {
     fn drop(&mut self) {
