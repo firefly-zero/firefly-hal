@@ -14,7 +14,7 @@ const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
-const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
+const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 12;
 
 #[derive(Clone)]
 pub struct DeviceConfig {
@@ -693,7 +693,8 @@ fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
     mixer.add(source);
     let audio = AudioWriter {
         buf: [0; AUDIO_BUF_SIZE],
-        idx: 0,
+        pending_from: 0,
+        pending_to: 0,
         send,
         _stream: stream,
     };
@@ -703,30 +704,49 @@ fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
 struct AudioWriter {
     buf: [i16; AUDIO_BUF_SIZE],
     send: mpsc::SyncSender<i16>,
-    /// The index of the next sample that we'll need to try sending.
-    idx: usize,
+    pending_from: usize,
+    pending_to: usize,
     #[cfg(not(target_os = "android"))]
     _stream: rodio::OutputStream,
 }
 
 impl AudioWriter {
-    fn get_write_buf(&mut self) -> &mut [i16] {
-        if self.idx == AUDIO_BUF_SIZE {
-            self.idx = 0;
-        }
-        let start = self.idx;
-        let mut idx = self.idx;
-        // write as much as we can from the buffer into the channel
-        while idx < AUDIO_BUF_SIZE {
-            let res = self.send.try_send(self.buf[idx]);
+    fn consume(&mut self) {
+        while self.pending_from > self.pending_to {
+            let byte = self.buf[self.pending_from];
+            let res = self.send.try_send(byte);
             if res.is_err() {
-                break;
+                return;
             }
-            idx += 1;
+            if self.pending_from < self.buf.len() {
+                self.pending_from += 1;
+            } else {
+                self.pending_from = 0;
+            }
         }
-        self.idx = idx;
-        // fill the now empty part of the buffer with audio data
-        &mut self.buf[start..idx]
+        while self.pending_from < self.pending_to {
+            let byte = self.buf[self.pending_from];
+            let res = self.send.try_send(byte);
+            if res.is_err() {
+                return;
+            }
+            self.pending_from += 1;
+        }
+    }
+
+    fn get_write_buf(&mut self) -> &mut [i16] {
+        self.consume();
+        if self.pending_from == self.pending_to {
+            self.pending_from = 0;
+            self.pending_to = self.buf.len();
+            return &mut self.buf;
+        }
+        if self.pending_from < self.pending_to {
+            let start = self.pending_to;
+            self.pending_to = self.buf.len();
+            return &mut self.buf[start..self.pending_to];
+        }
+        return &mut [];
     }
 }
 
@@ -760,7 +780,7 @@ impl Iterator for AudioReader {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let s = self.recv.try_recv().unwrap_or_default();
+        let s = self.recv.recv().unwrap_or_default();
         if let Some(wav) = self.wav.as_mut() {
             wav.write_sample(s).unwrap()
         }
