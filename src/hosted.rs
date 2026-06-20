@@ -333,6 +333,7 @@ impl<'a> Network for DeviceImpl<'a> {
 
     fn net_stop(&mut self) -> NetworkResult<()> {
         _ = self.network.s_stop.send(());
+        self.network = NetworkImpl::new();
         Ok(())
     }
 
