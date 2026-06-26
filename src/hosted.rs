@@ -123,21 +123,16 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn get_name(&mut self) -> Option<&'static str> {
-        self.log_debug("x", "a");
         let addr = self.network.local_addr?;
-        self.log_debug("x", "b");
         let IpAddr::V4(ip) = addr.ip() else {
             return None;
         };
-        self.log_debug("x", "c");
         let port = addr.port();
         if port == UDP_PORT_MIN {
             return None;
         }
-        self.log_debug("x", "d");
         let hash = (ip.to_bits() + u32::from(port)) % 10;
         let name = NAMES[hash as usize];
-        self.log_debug("x", name);
         Some(name)
     }
 
