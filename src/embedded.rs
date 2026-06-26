@@ -167,6 +167,10 @@ impl<'a> Device for DeviceImpl<'a> {
         }
     }
 
+    fn get_name(&mut self) -> Option<&'static str> {
+        None
+    }
+
     fn log_debug<D: core::fmt::Display>(&mut self, src: &str, msg: D) {
         let msg = alloc::format!("DEBUG({src}): {msg}");
         self.log(&msg);

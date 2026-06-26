@@ -116,6 +116,12 @@ pub trait Device: Network + Serial + Wifi {
     /// Read gamepad input.
     fn read_input(&mut self) -> Option<InputState>;
 
+    /// Get device name override.
+    ///
+    /// Used by emulator in multiplayer to give different names
+    /// to multiple emulators running on the save vfs.
+    fn get_name(&mut self) -> Option<&'static str>;
+
     /// Log a debug message into console.
     ///
     /// On hosted environments, it just prints into stdout.

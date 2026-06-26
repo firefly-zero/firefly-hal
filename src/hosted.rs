@@ -16,6 +16,19 @@ const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
 const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 12;
 
+static NAMES: &[&str] = &[
+    "j0vial-dharm4",
+    "angry-6r4d13y",
+    "nic3-5ugar",
+    "quirky-5co06ie",
+    "r31ax3d-s0phie",
+    "sh4rp-7oni",
+    "boring-5ky",
+    "m4gica1-5i3nn4",
+    "b0ring-che57er",
+    "shy-a5tr0",
+];
+
 #[derive(Clone)]
 pub struct DeviceConfig {
     /// The full path to the VFS.
@@ -107,6 +120,25 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn read_input(&mut self) -> Option<InputState> {
         self.gamepad.read_input()
+    }
+
+    fn get_name(&mut self) -> Option<&'static str> {
+        self.log_debug("x", "a");
+        let addr = self.network.local_addr?;
+        self.log_debug("x", "b");
+        let IpAddr::V4(ip) = addr.ip() else {
+            return None;
+        };
+        self.log_debug("x", "c");
+        let port = addr.port();
+        if port == UDP_PORT_MIN {
+            return None;
+        }
+        self.log_debug("x", "d");
+        let hash = (ip.to_bits() + u32::from(port)) % 10;
+        let name = NAMES[hash as usize];
+        self.log_debug("x", name);
+        Some(name)
     }
 
     fn log_debug<D: Display>(&mut self, src: &str, msg: D) {
