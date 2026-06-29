@@ -774,7 +774,7 @@ impl AudioWriter {
             self.pending_to = self.buf.len();
             return &mut self.buf[start..self.pending_to];
         }
-        return &mut [];
+        &mut []
     }
 }
 
