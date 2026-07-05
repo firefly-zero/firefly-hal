@@ -45,6 +45,9 @@ pub struct DeviceConfig {
 
     /// If provided, the path where to save the audio output (as a WAV file).
     pub wav: Option<PathBuf>,
+
+    /// Don't play any audio.
+    pub mute: bool,
 }
 
 impl Default for DeviceConfig {
@@ -56,6 +59,7 @@ impl Default for DeviceConfig {
             udp_ip: localhost,
             peers: vec![localhost],
             wav: None,
+            mute: false,
         }
     }
 }
@@ -76,10 +80,11 @@ pub struct DeviceImpl<'a> {
 
 impl<'a> DeviceImpl<'a> {
     pub fn new(config: DeviceConfig) -> Self {
+        let mut audio = None;
         #[cfg(not(target_os = "android"))]
-        let audio = start_audio(&config);
-        #[cfg(target_os = "android")]
-        let audio = None;
+        if !config.mute {
+            audio = start_audio(&config);
+        }
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
