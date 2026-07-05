@@ -76,8 +76,26 @@ impl DeviceImpl<'_> {
         send_to_serial(&mut self.usb_serial, &raw);
     }
 
+    /// Allocate empty vector on PSRAM (slow RAM).
+    ///
+    /// The signature is slightly different on hosted and embedded
+    /// (because allocator is part of the type) so this method
+    /// is not part of the [`Device`] interface.
     pub fn alloc_psram(&self, size: usize) -> Vec<u8, esp_alloc::ExternalMemory> {
         Vec::with_capacity_in(size, esp_alloc::ExternalMemory)
+    }
+
+    /// Request firmware version and OTA partition number from IO chip.
+    ///
+    /// Used only by firefly-main hence has no hosted counterpart.
+    pub fn get_io_chip_info(&mut self) -> Option<((u8, u8, u8), u8)> {
+        let req = firefly_types::spi::Request::FirmwareInfo;
+        let raw = self.io_transfer(req).ok()?;
+        let resp = self.io_decode(&raw).ok()?;
+        let firefly_types::spi::Response::FirmwareInfo { version, partition } = resp else {
+            return None;
+        };
+        Some((version, partition))
     }
 }
 
