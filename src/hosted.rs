@@ -14,7 +14,7 @@ const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
-const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 12;
+const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
 
 static NAMES: &[&str] = &[
     "j0vial-dharm4",
@@ -813,7 +813,7 @@ impl Iterator for AudioReader {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let s = self.recv.recv().unwrap_or_default();
+        let s = self.recv.try_recv().unwrap_or_default();
         if let Some(wav) = self.wav.as_mut() {
             wav.write_sample(s).unwrap()
         }
