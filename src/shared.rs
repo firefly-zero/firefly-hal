@@ -150,6 +150,9 @@ pub trait Device: Network + Serial + Wifi {
     fn get_audio_buffer(&mut self) -> &mut [i16];
 
     fn get_battery_status(&mut self) -> Option<BatteryStatus>;
+
+    fn write_partition(&mut self, part: u8, path: &[&str]) -> Result<(), &'static str>;
+    fn switch_partition(&mut self, part: u8) -> Result<(), &'static str>;
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;

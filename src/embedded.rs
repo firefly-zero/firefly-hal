@@ -12,13 +12,18 @@ use embedded_sdmmc::{
     LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard, ShortFileName, VolumeIdx,
     VolumeManager, filesystem::ToShortFileName,
 };
+use embedded_storage::Storage;
+use esp_bootloader_esp_idf::{
+    ota::Ota,
+    partitions::{AppPartitionSubType, DataPartitionSubType, PartitionType, read_partition_table},
+};
 use esp_hal::{
     Blocking, delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
     usb_serial_jtag::UsbSerialJtag,
 };
+use esp_storage::FlashStorage;
 use firefly_types::Encode;
 
-type IoUart = Uart<'static, Blocking>;
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type SD = SdCard<SdSpi, Delay>;
 type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
@@ -27,19 +32,21 @@ pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
     vm: Rc<RefCell<VM>>,
-    io_uart: IoUart,
-    usb_serial: UsbSerialJtag<'static, Blocking>,
+    io_uart: Uart<'a, Blocking>,
+    usb_serial: UsbSerialJtag<'a, Blocking>,
+    flash: FlashStorage<'a>,
     addr: Addr,
     rng: Rng,
     _life: &'a PhantomData<()>,
 }
 
-impl DeviceImpl<'_> {
+impl<'a> DeviceImpl<'a> {
     pub fn new(
         sd_spi: SdSpi,
-        io_uart: IoUart,
-        usb_serial: UsbSerialJtag<'static, Blocking>,
+        io_uart: Uart<'a, Blocking>,
+        usb_serial: UsbSerialJtag<'a, Blocking>,
         rng: Rng,
+        flash: FlashStorage<'a>,
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
@@ -56,6 +63,7 @@ impl DeviceImpl<'_> {
             usb_serial,
             addr: Default::default(),
             rng,
+            flash,
             _life: &PhantomData,
         };
 
@@ -231,6 +239,76 @@ impl<'a> Device for DeviceImpl<'a> {
             connected: true,
             full: false,
         })
+    }
+
+    fn write_partition(&mut self, part: u8, path: &[&str]) -> Result<(), &'static str> {
+        let last_i = path.len() - 1;
+        let Ok(mut dir) = self.open_dir(&path[..last_i]) else {
+            return Err("failed to open firmware directory");
+        };
+        let Ok(mut file) = dir.open_file(path[last_i]) else {
+            return Err("failed to open firmware file");
+        };
+
+        let mut buf = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+        let Ok(parts) = read_partition_table(&mut self.flash, &mut buf) else {
+            return Err("failed to read partition table");
+        };
+        let part = match part {
+            0 => AppPartitionSubType::Factory,
+            1 => AppPartitionSubType::Ota0,
+            2 => AppPartitionSubType::Ota1,
+            _ => return Err("selected partition is out of range"),
+        };
+        let Ok(partition) = parts.find_partition(PartitionType::App(part)) else {
+            return Err("cannot read partitions");
+        };
+        let Some(partition) = partition else {
+            return Err("cannot find runtime partition");
+        };
+        let mut storage = partition.as_embedded_storage(&mut self.flash);
+
+        let mut written = 0;
+        let mut buf = [0u8; 4096];
+        while let Ok(chunk_size) = file.read(&mut buf) {
+            let res = storage.write(written, &buf);
+            if res.is_err() {
+                return Err("failed to write firmware into partition");
+            }
+            written += chunk_size as u32;
+        }
+
+        Ok(())
+    }
+
+    fn switch_partition(&mut self, part: u8) -> Result<(), &'static str> {
+        let mut buf = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+        let Ok(parts) = read_partition_table(&mut self.flash, &mut buf) else {
+            return Err("failed to read partition table");
+        };
+        let part_type = PartitionType::Data(DataPartitionSubType::Ota);
+        let Ok(ota_part) = parts.find_partition(part_type) else {
+            return Err("cannot read partitions");
+        };
+        let Some(ota_part) = ota_part else {
+            return Err("cannot find OTA data partition");
+        };
+        let ota_part = ota_part.as_embedded_storage(&mut self.flash);
+        let Ok(mut ota) = Ota::new(ota_part, 2) else {
+            return Err("OTA partition is invalid");
+        };
+
+        let part = match part {
+            0 => AppPartitionSubType::Factory,
+            1 => AppPartitionSubType::Ota0,
+            2 => AppPartitionSubType::Ota1,
+            _ => panic!(),
+        };
+        let res = ota.set_current_app_partition(part);
+        if res.is_err() {
+            return Err("failed to set OTA partition");
+        }
+        Ok(())
     }
 }
 
@@ -621,7 +699,7 @@ impl Serial for DeviceImpl<'_> {
     }
 }
 
-fn send_to_serial(usb: &mut UsbSerialJtag<'static, Blocking>, data: &[u8]) {
+fn send_to_serial(usb: &mut UsbSerialJtag<'_, Blocking>, data: &[u8]) {
     let n = cobs::max_encoding_length(data.len());
     let mut buf = alloc::vec![0; n];
     cobs::encode(data, &mut buf);
