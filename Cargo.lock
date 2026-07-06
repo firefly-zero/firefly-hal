@@ -894,7 +894,7 @@ dependencies = [
 
 [[package]]
 name = "firefly-hal"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cobs 0.5.1",
  "embedded-hal 1.0.0",
