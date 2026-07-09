@@ -270,8 +270,10 @@ impl<'a> Device for DeviceImpl<'a> {
 
         let mut written = 0;
         let mut buf = [0u8; 4096];
-        while let Ok(chunk_size) = file.read(&mut buf) {
-            let res = storage.write(written, &buf);
+        while let Ok(chunk_size) = file.read(&mut buf)
+            && chunk_size != 0
+        {
+            let res = storage.write(written, &buf[..chunk_size]);
             if res.is_err() {
                 return Err("failed to write firmware into partition");
             }
