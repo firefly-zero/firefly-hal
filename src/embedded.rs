@@ -21,7 +21,7 @@ use esp_hal::{
     Blocking, delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
     usb_serial_jtag::UsbSerialJtag,
 };
-use esp_storage::FlashStorage;
+use esp_storage::{FlashStorage, FlashStorageError};
 use firefly_types::Encode;
 
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
@@ -104,65 +104,6 @@ impl<'a> DeviceImpl<'a> {
             return None;
         };
         Some((version, partition))
-    }
-
-    fn write_io_partition(&mut self, part: u8, file: &mut FileR) -> Result<(), &'static str> {
-        use firefly_types::spi::{Request, Response};
-        let req = Request::PartitionWrite(part, file.get_size());
-        _ = self.io_send(req);
-        let mut buf = [0u8; 80];
-        let mut written = 0;
-        while let Ok(chunk_size) = file.read(&mut buf)
-            && chunk_size != 0
-        {
-            let chunk = &buf[..chunk_size];
-            let Ok(resp) = self.io_transfer(Request::PartitionChunk(chunk)) else {
-                return Err("transfer error");
-            };
-            let Ok(resp) = self.io_decode(&resp) else {
-                return Err("decode error");
-            };
-            if !matches!(resp, Response::PartitionChunk) {
-                return Err("unexpected response");
-            }
-            written += chunk_size;
-            self.log(&alloc::format!("{}/{}", written, file.get_size()));
-        }
-        Ok(())
-    }
-
-    fn write_main_partition(&mut self, part: u8, mut file: FileR) -> Result<(), &'static str> {
-        let mut buf = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
-        let Ok(parts) = read_partition_table(&mut self.flash, &mut buf) else {
-            return Err("failed to read partition table");
-        };
-        let part = match part {
-            0 => AppPartitionSubType::Factory,
-            1 => AppPartitionSubType::Ota0,
-            2 => AppPartitionSubType::Ota1,
-            _ => return Err("selected partition is out of range"),
-        };
-        let Ok(partition) = parts.find_partition(PartitionType::App(part)) else {
-            return Err("cannot read partitions");
-        };
-        let Some(partition) = partition else {
-            return Err("cannot find runtime partition");
-        };
-        let mut storage = partition.as_embedded_storage(&mut self.flash);
-
-        let mut written = 0;
-        let mut buf = [0u8; 4096];
-        while let Ok(chunk_size) = file.read(&mut buf)
-            && chunk_size != 0
-        {
-            let res = storage.write(written, &buf[..chunk_size]);
-            if res.is_err() {
-                return Err("failed to write firmware into partition");
-            }
-            written += chunk_size as u32;
-        }
-
-        Ok(())
     }
 }
 
@@ -300,36 +241,35 @@ impl<'a> Device for DeviceImpl<'a> {
         })
     }
 
-    fn write_partition(&mut self, part: u8, path: &[&str]) -> Result<(), &'static str> {
-        let last_i = path.len() - 1;
-        let Ok(mut dir) = self.open_dir(&path[..last_i]) else {
-            return Err("failed to open firmware directory");
-        };
-        let Ok(mut file) = dir.open_file(path[last_i]) else {
-            return Err("failed to open firmware file");
-        };
-        if part >= 10 {
-            self.write_io_partition(part - 10, &mut file)
-        } else {
-            self.write_main_partition(part, file)
+    fn write_main_flash(&mut self, offset: u32, data: &[u8]) -> Result<(), &'static str> {
+        let res = self.flash.write(offset, data);
+        if let Err(err) = res {
+            let err = match err {
+                FlashStorageError::IoError => "flash error: IO error",
+                FlashStorageError::IoTimeout => "flash error: IO timeout",
+                FlashStorageError::CantUnlock => "flash error: can't unlock for write",
+                FlashStorageError::NotAligned => "flash error: not aligned",
+                FlashStorageError::OutOfBounds => "flash error: out of bounds write",
+                FlashStorageError::OtherCoreRunning => "flash error: other core running",
+                FlashStorageError::Other(_) => "flash error",
+                _ => "unknown flash error",
+            };
+            return Err(err);
         }
+        Ok(())
     }
 
-    fn switch_partition(&mut self, part: u8) -> Result<(), &'static str> {
-        if part >= 10 {
-            let req = firefly_types::spi::Request::PartitionSwitch(part);
-            let Ok(resp) = self.io_transfer(req) else {
-                return Err("UART error");
-            };
-            let Ok(resp) = self.io_decode(&resp) else {
-                return Err("cannot decode response");
-            };
-            if !matches!(resp, firefly_types::spi::Response::PartitionSwitched) {
-                return Err("unexpected response");
-            }
-            return Ok(());
+    fn write_io_flash(&mut self, offset: u32, data: &[u8]) -> NetworkResult<()> {
+        let req = firefly_types::spi::Request::FlashWrite(offset, data);
+        let resp = self.io_transfer(req)?;
+        let resp = self.io_decode(&resp)?;
+        if !matches!(resp, firefly_types::spi::Response::FlashWritten) {
+            return Err(NetworkError::Error("unexpected response"));
         }
+        Ok(())
+    }
 
+    fn switch_main_partition(&mut self, part: u8) -> Result<(), &'static str> {
         let mut buf = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
         let Ok(parts) = read_partition_table(&mut self.flash, &mut buf) else {
             return Err("failed to read partition table");
@@ -355,6 +295,16 @@ impl<'a> Device for DeviceImpl<'a> {
         let res = ota.set_current_app_partition(part);
         if res.is_err() {
             return Err("failed to set OTA partition");
+        }
+        Ok(())
+    }
+
+    fn switch_io_partition(&mut self, part: u8) -> NetworkResult<()> {
+        let req = firefly_types::spi::Request::PartitionSwitch(part);
+        let resp = self.io_transfer(req)?;
+        let resp = self.io_decode(&resp)?;
+        if !matches!(resp, firefly_types::spi::Response::PartitionSwitched) {
+            return Err(NetworkError::Error("unexpected response"));
         }
         Ok(())
     }
@@ -557,13 +507,6 @@ impl Drop for FileW {
 pub struct FileR {
     vm: Rc<RefCell<VM>>,
     file: embedded_sdmmc::RawFile,
-}
-
-impl FileR {
-    fn get_size(&self) -> u32 {
-        let manager = &self.vm.borrow();
-        manager.file_length(self.file).unwrap_or_default()
-    }
 }
 
 impl embedded_io::ErrorType for FileR {

@@ -190,18 +190,19 @@ impl<'a> Device for DeviceImpl<'a> {
         })
     }
 
-    fn write_partition(&mut self, _part: u8, path: &[&str]) -> Result<(), &'static str> {
-        let in_path: PathBuf = path.iter().collect();
-        let in_path = self.config.root.join(in_path);
-        let out_path = self.config.root.join("firefly-emulator");
-        let res = std::fs::copy(in_path, out_path);
-        if res.is_err() {
-            return Err("failed to write partition");
-        }
+    fn write_main_flash(&mut self, _offset: u32, _data: &[u8]) -> Result<(), &'static str> {
         Ok(())
     }
 
-    fn switch_partition(&mut self, _part: u8) -> Result<(), &'static str> {
+    fn write_io_flash(&mut self, _offset: u32, _data: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn switch_main_partition(&mut self, _part: u8) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn switch_io_partition(&mut self, _part: u8) -> NetworkResult<()> {
         Ok(())
     }
 }

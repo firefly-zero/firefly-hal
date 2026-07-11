@@ -151,8 +151,10 @@ pub trait Device: Network + Serial + Wifi {
 
     fn get_battery_status(&mut self) -> Option<BatteryStatus>;
 
-    fn write_partition(&mut self, part: u8, path: &[&str]) -> Result<(), &'static str>;
-    fn switch_partition(&mut self, part: u8) -> Result<(), &'static str>;
+    fn write_main_flash(&mut self, offset: u32, data: &[u8]) -> Result<(), &'static str>;
+    fn write_io_flash(&mut self, offset: u32, data: &[u8]) -> NetworkResult<()>;
+    fn switch_main_partition(&mut self, part: u8) -> Result<(), &'static str>;
+    fn switch_io_partition(&mut self, part: u8) -> NetworkResult<()>;
 }
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
