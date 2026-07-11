@@ -107,13 +107,26 @@ impl<'a> DeviceImpl<'a> {
     }
 
     fn write_io_partition(&mut self, part: u8, file: &mut FileR) -> Result<(), &'static str> {
-        let req = firefly_types::spi::Request::PartitionWrite(part, file.get_size());
+        use firefly_types::spi::{Request, Response};
+        let req = Request::PartitionWrite(part, file.get_size());
         _ = self.io_send(req);
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; 80];
+        let mut written = 0;
         while let Ok(chunk_size) = file.read(&mut buf)
             && chunk_size != 0
         {
-            _ = self.io_uart.write(&buf[..chunk_size]);
+            let chunk = &buf[..chunk_size];
+            let Ok(resp) = self.io_transfer(Request::PartitionChunk(chunk)) else {
+                return Err("transfer error");
+            };
+            let Ok(resp) = self.io_decode(&resp) else {
+                return Err("decode error");
+            };
+            if !matches!(resp, Response::PartitionChunk) {
+                return Err("unexpected response");
+            }
+            written += chunk_size;
+            self.log(&alloc::format!("{}/{}", written, file.get_size()));
         }
         Ok(())
     }
@@ -592,10 +605,7 @@ impl Drop for FileR {
 
 impl DeviceImpl<'_> {
     /// Send request to the firefly-io chip and read response.
-    fn io_transfer(
-        &mut self,
-        req: firefly_types::spi::Request<'_>,
-    ) -> Result<Vec<u8>, NetworkError> {
+    fn io_transfer(&mut self, req: firefly_types::spi::Request<'_>) -> NetworkResult<Vec<u8>> {
         // send request
         let mut raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
@@ -616,7 +626,7 @@ impl DeviceImpl<'_> {
     }
 
     /// Send request to the firefly-io chip without reading response.
-    fn io_send(&mut self, req: firefly_types::spi::Request<'_>) -> Result<(), NetworkError> {
+    fn io_send(&mut self, req: firefly_types::spi::Request<'_>) -> NetworkResult<()> {
         let raw = req.encode_vec()?;
         let Ok(size) = u8::try_from(raw.len()) else {
             return Err(NetworkError::Error("request payload is too big"));
