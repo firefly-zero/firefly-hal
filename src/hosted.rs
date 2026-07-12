@@ -72,7 +72,7 @@ pub struct DeviceImpl<'a> {
     gamepad: GamepadManager,
     /// The audio buffer
     audio: Option<AudioWriter>,
-    wifi_status: u8,
+    wifi_status: firefly_types::wifi::Status,
     network: NetworkImpl<'a>,
     serial: SerialImpl,
     tcp_conn: Option<TcpStream>,
@@ -90,7 +90,7 @@ impl<'a> DeviceImpl<'a> {
             gamepad: GamepadManager::new(),
             audio,
             config,
-            wifi_status: 2,
+            wifi_status: firefly_types::wifi::Status::Stopped,
             network: NetworkImpl::new(),
             serial: SerialImpl::new(),
             tcp_conn: None,
@@ -488,32 +488,33 @@ impl Wifi for DeviceImpl<'_> {
     }
 
     fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
-        if ssid != "Default Network" {
-            self.wifi_status = 2; // disconnected
+        use firefly_types::wifi::{DisconnectReason, Status};
+        self.wifi_status = if ssid != "Default Network" {
+            Status::Disconnected(DisconnectReason::NoApFound)
         } else if pass == "invalid" {
-            self.wifi_status = 1; // error
+            Status::Disconnected(DisconnectReason::AuthFail)
         } else {
-            self.wifi_status = 3; // initializing
-        }
+            Status::Initializing
+        };
         Ok(())
     }
 
     fn wifi_status(&mut self) -> NetworkResult<u8> {
-        if self.wifi_status == 3 {
-            self.wifi_status = 4; // connected
-            Ok(3)
-        } else {
-            Ok(self.wifi_status)
+        use firefly_types::wifi::Status;
+        if self.wifi_status == Status::Initializing {
+            self.wifi_status = Status::Connected;
         }
+        Ok(self.wifi_status.into())
     }
 
     fn wifi_disconnect(&mut self) -> NetworkResult<()> {
-        self.wifi_status = 2;
+        self.wifi_status = firefly_types::wifi::Status::Stopped;
         Ok(())
     }
 
     fn tcp_connect(&mut self, ip: u32, port: u16) -> NetworkResult<()> {
-        if self.wifi_status != 4 {
+        use firefly_types::wifi::Status;
+        if self.wifi_status != Status::Connected {
             return Err(NetworkError::Error("not connected to wifi"));
         }
         let ip = Ipv4Addr::new(
