@@ -2,9 +2,7 @@ use crate::errors::*;
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::fmt::Display;
-use core::ops::AddAssign;
-use core::ops::Sub;
-use core::ops::SubAssign;
+use core::ops::*;
 use firefly_types::spi::SendStatus;
 
 pub const SAMPLE_RATE: u32 = 44_100;
@@ -13,7 +11,7 @@ pub const SAMPLE_RATE: u32 = 44_100;
 #[derive(Copy, Clone)]
 pub struct Instant {
     /// Microseconds passed since the device was restarted.
-    pub us: u32,
+    pub(crate) us: u32,
 }
 
 impl Sub for Instant {
@@ -22,6 +20,16 @@ impl Sub for Instant {
     fn sub(self, rhs: Self) -> Duration {
         Duration {
             us: self.us.saturating_sub(rhs.us),
+        }
+    }
+}
+
+impl Add<Duration> for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self {
+            us: self.us + rhs.us,
         }
     }
 }
