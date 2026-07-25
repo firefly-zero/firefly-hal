@@ -12,6 +12,7 @@ pub const SAMPLE_RATE: u32 = 44_100;
 /// A moment in time. Obtained from [Device::now].
 #[derive(Copy, Clone)]
 pub struct Instant {
+    /// Microseconds passed since the device was restarted.
     pub us: u32,
 }
 

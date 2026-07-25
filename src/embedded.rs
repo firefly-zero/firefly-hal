@@ -37,6 +37,7 @@ pub struct DeviceImpl<'a> {
     flash: FlashStorage<'a>,
     addr: Addr,
     rng: Rng,
+    start: esp_hal::time::Instant,
     _life: &'a PhantomData<()>,
 }
 
@@ -64,6 +65,7 @@ impl<'a> DeviceImpl<'a> {
             addr: Default::default(),
             rng,
             flash,
+            start: esp_hal::time::Instant::now(),
             _life: &PhantomData,
         };
 
@@ -162,9 +164,8 @@ impl<'a> Device for DeviceImpl<'a> {
     type Dir = DirImpl;
 
     fn now(&self) -> Instant {
-        let now = esp_hal::time::Instant::now();
         Instant {
-            us: now.duration_since_epoch().as_micros() as u32,
+            us: self.start.elapsed().as_micros() as u32,
         }
     }
 
