@@ -7,11 +7,17 @@ use firefly_types::spi::SendStatus;
 
 pub const SAMPLE_RATE: u32 = 44_100;
 
-/// A moment in time. Obtained from [Device::now].
+/// A moment in time. Obtained from [`Device::now`].
 #[derive(Copy, Clone)]
 pub struct Instant {
     /// Microseconds passed since the device was restarted.
     pub(crate) us: u32,
+}
+
+impl Instant {
+    pub fn us(self) -> u32 {
+        self.us
+    }
 }
 
 impl Sub for Instant {
@@ -34,7 +40,9 @@ impl Add<Duration> for Instant {
     }
 }
 
-/// Difference between two [Instant]'s. Used by [Device::delay].
+/// Difference between two [Instant]'s.
+///
+/// Obtained from [`Instant::sub`]. Used by [`Device::delay`].
 #[derive(PartialEq, PartialOrd, Copy, Clone)]
 pub struct Duration {
     pub(crate) us: u32,
