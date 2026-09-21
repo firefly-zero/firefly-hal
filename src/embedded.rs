@@ -12,14 +12,13 @@ use embedded_sdmmc::{
     LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard, ShortFileName, VolumeIdx,
     VolumeManager, filesystem::ToShortFileName,
 };
-use embedded_storage::Storage;
 use esp_bootloader_esp_idf::{
     ota::Ota,
     partitions::{AppPartitionSubType, DataPartitionSubType, PartitionType, read_partition_table},
 };
 use esp_hal::{
     Blocking, delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
-    usb_serial_jtag::UsbSerialJtag,
+    usb::usb_serial_jtag::UsbSerialJtag,
 };
 use esp_storage::{FlashStorage, FlashStorageError};
 use firefly_types::Encode;
@@ -281,7 +280,7 @@ impl<'a> Device for DeviceImpl<'a> {
         let Some(ota_part) = ota_part else {
             return Err("cannot find OTA data partition");
         };
-        let ota_part = ota_part.as_embedded_storage(&mut self.flash);
+        let ota_part = ota_part.as_flash_region(&mut self.flash);
         let Ok(mut ota) = Ota::new(ota_part, 2) else {
             return Err("OTA partition is invalid");
         };
