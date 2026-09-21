@@ -46,7 +46,6 @@ impl<'a> DeviceImpl<'a> {
         sd_spi: SdSpi,
         io_uart: Uart<'a, Blocking>,
         usb_serial: UsbSerialJtag<'a, Blocking>,
-        rng: Rng,
         flash: FlashStorage<'a>,
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
@@ -63,7 +62,7 @@ impl<'a> DeviceImpl<'a> {
             io_uart,
             usb_serial,
             addr: Default::default(),
-            rng,
+            rng: Rng::new(),
             flash,
             start: esp_hal::time::Instant::now(),
             _life: &PhantomData,
