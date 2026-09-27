@@ -49,8 +49,13 @@ impl<'a> DeviceImpl<'a> {
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
         let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
-        let Ok(volume) = volume_manager.open_volume(VolumeIdx(0)) else {
-            return Err(NetworkError::Error("failed to open SD card volume 0"));
+        let volume = match volume_manager.open_volume(VolumeIdx(0)) {
+            Ok(volume) => volume,
+            Err(err) => {
+                return Err(NetworkError::OwnedError(alloc::format!(
+                    "failed to open SD card volume 0: {err:?}"
+                )));
+            }
         };
         let volume = volume.to_raw_volume();
 

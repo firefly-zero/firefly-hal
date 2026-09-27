@@ -264,6 +264,7 @@ impl fmt::Display for FSError {
     }
 }
 
+#[derive(Debug)]
 pub enum NetworkError {
     NotInitialized,
     AlreadyInitialized,
@@ -281,6 +282,8 @@ pub enum NetworkError {
     OwnedError(alloc::string::String),
     Other(u32),
 }
+
+impl core::error::Error for NetworkError {}
 
 impl From<postcard::Error> for NetworkError {
     fn from(v: postcard::Error) -> Self {
