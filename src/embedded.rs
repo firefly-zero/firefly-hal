@@ -5,7 +5,7 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::{cell::RefCell, marker::PhantomData, str};
+use core::{cell::RefCell, marker::PhantomData, ops::ControlFlow, str};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
 use embedded_sdmmc::{
@@ -130,12 +130,14 @@ fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFi
     let mut buf = [0u8; 64];
     let mut lfnb = LfnBuffer::new(&mut buf);
     manager.iterate_dir_lfn(dir, &mut lfnb, |entry, long_name| {
-        if result.is_some() {
-            return;
-        }
-        let Some(long_name) = long_name else { return };
+        let Some(long_name) = long_name else {
+            return ControlFlow::Continue(());
+        };
         if long_name.trim_ascii() == name {
-            result = Some(entry.name.clone())
+            result = Some(entry.name);
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
         }
     })?;
     let Some(file_name) = result else {
@@ -366,7 +368,7 @@ impl Dir for DirImpl {
                 return Err(err);
             }
         };
-        let res = manager.delete_file_in_dir(self.dir, short_name);
+        let res = manager.delete_entry_in_dir(self.dir, short_name);
         res?;
         Ok(())
     }
@@ -385,14 +387,14 @@ impl Dir for DirImpl {
         dir.iterate_dir(|entry| {
             let name_str = entry.name.to_string();
             if &name_str != "." && &name_str != ".." {
-                names.push(entry.name.clone());
+                names.push(entry.name);
             }
+            ControlFlow::Continue(())
         })?;
         for name in names {
-            dir.delete_file_in_dir(&name)?;
+            dir.delete_entry_in_dir(name)?;
         }
-        // TODO: Add `delete_file_in_dir` when embedded-sdmmc 0.10.0 is released.
-        //      https://github.com/rust-embedded-community/embedded-sdmmc-rs/pull/210
+        // TODO: Use `delete_entry_in_dir` to delete the current dir from the parent.
         Ok(())
     }
 
@@ -406,7 +408,7 @@ impl Dir for DirImpl {
         manager.iterate_dir_lfn(self.dir, &mut lfnb, |entry, long_name| {
             let base_name = entry.name.base_name();
             if base_name.first() == Some(&b'.') {
-                return;
+                return ControlFlow::Continue(());
             }
             let name = match long_name {
                 Some(long_name) => long_name.trim_ascii().as_bytes(),
@@ -418,6 +420,7 @@ impl Dir for DirImpl {
                 EntryKind::File
             };
             f(kind, name);
+            ControlFlow::Continue(())
         })?;
         Ok(())
     }

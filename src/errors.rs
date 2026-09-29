@@ -109,7 +109,7 @@ pub enum FSError {
 }
 
 #[cfg(target_os = "none")]
-impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
+impl<T: fmt::Debug + core::error::Error> From<embedded_sdmmc::Error<T>> for FSError {
     fn from(value: embedded_sdmmc::Error<T>) -> Self {
         use embedded_sdmmc::Error::*;
         match value {
@@ -126,7 +126,7 @@ impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
             DirAlreadyOpen => Self::DirAlreadyOpen,
             OpenedDirAsFile => Self::OpenedDirAsFile,
             OpenedFileAsDir => Self::OpenedFileAsDir,
-            DeleteDirAsFile => Self::DeleteDirAsFile,
+            DeleteNonEmptyDir => Self::DeleteDirAsFile,
             VolumeStillInUse => Self::VolumeStillInUse,
             VolumeAlreadyOpen => Self::VolumeAlreadyOpen,
             Unsupported => Self::Unsupported,
@@ -138,11 +138,11 @@ impl<T: fmt::Debug> From<embedded_sdmmc::Error<T>> for FSError {
             UnterminatedFatChain => Self::UnterminatedFatChain,
             ReadOnly => Self::ReadOnly,
             FileAlreadyExists => Self::FileAlreadyExists,
-            BadBlockSize(size) => Self::BadBlockSize(size),
+            BadBlockSize(x) => Self::BadBlockSize(x),
             InvalidOffset => Self::InvalidOffset,
             DiskFull => Self::DiskFull,
             DirAlreadyExists => Self::DirAlreadyExists,
-            LockError => Self::Deadlock,
+            LockError => Self::Other,
         }
     }
 }
