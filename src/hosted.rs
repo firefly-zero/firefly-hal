@@ -15,7 +15,6 @@ const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;
 const TCP_PORT_MIN: u16 = 3210;
 const TCP_PORT_MAX: u16 = 3217;
-const AUDIO_BUF_SIZE: usize = SAMPLE_RATE as usize / 6;
 
 static NAMES: &[&str] = &[
     "j0vial-dharm4",
@@ -71,8 +70,6 @@ pub struct DeviceImpl<'a> {
     start: std::time::Instant,
     /// The shared logic for reading the gamepad input.
     gamepad: GamepadManager,
-    /// The audio buffer
-    audio: Option<AudioWriter>,
     wifi_status: firefly_types::wifi::Status,
     network: NetworkImpl<'a>,
     serial: SerialImpl,
@@ -81,15 +78,9 @@ pub struct DeviceImpl<'a> {
 
 impl<'a> DeviceImpl<'a> {
     pub fn new(config: DeviceConfig) -> Self {
-        let mut audio = None;
-        #[cfg(not(target_os = "android"))]
-        if !config.mute {
-            audio = start_audio(&config);
-        }
         Self {
             start: std::time::Instant::now(),
             gamepad: GamepadManager::new(),
-            audio,
             config,
             wifi_status: firefly_types::wifi::Status::Stopped,
             network: NetworkImpl::new(),
@@ -168,13 +159,6 @@ impl<'a> Device for DeviceImpl<'a> {
 
     fn has_headphones(&mut self) -> bool {
         false
-    }
-
-    fn get_audio_buffer(&mut self) -> &mut [i16] {
-        match &mut self.audio {
-            Some(audio) => audio.get_write_buf(),
-            None => &mut [][..],
-        }
     }
 
     #[cfg(target_os = "android")]
@@ -715,127 +699,5 @@ impl RingBuf {
 
     fn iter_mut(&mut self) -> impl Iterator<Item = &mut TcpStream> {
         self.data.iter_mut().filter_map(Option::as_mut)
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-fn start_audio(config: &DeviceConfig) -> Option<AudioWriter> {
-    let wav = if let Some(filename) = &config.wav {
-        let spec = hound::WavSpec {
-            channels: 2,
-            sample_rate: SAMPLE_RATE,
-            bits_per_sample: 16,
-            sample_format: hound::SampleFormat::Int,
-        };
-        let writer = hound::WavWriter::create(filename, spec).unwrap();
-        Some(writer)
-    } else {
-        None
-    };
-
-    let (send, recv) = mpsc::sync_channel(AUDIO_BUF_SIZE);
-    let Ok(mut stream) = rodio::OutputStreamBuilder::open_default_stream() else {
-        eprintln!("WARNING: audio device is not available, sound will be disabled");
-        return None;
-    };
-    stream.log_on_drop(false);
-    let mixer = stream.mixer();
-    let source = AudioReader { wav, recv };
-    mixer.add(source);
-    let audio = AudioWriter {
-        buf: [0; AUDIO_BUF_SIZE],
-        pending_from: 0,
-        pending_to: 0,
-        send,
-        _stream: stream,
-    };
-    Some(audio)
-}
-
-struct AudioWriter {
-    buf: [i16; AUDIO_BUF_SIZE],
-    send: mpsc::SyncSender<i16>,
-    pending_from: usize,
-    pending_to: usize,
-    #[cfg(not(target_os = "android"))]
-    _stream: rodio::OutputStream,
-}
-
-impl AudioWriter {
-    fn consume(&mut self) {
-        while self.pending_from > self.pending_to {
-            let byte = self.buf[self.pending_from];
-            let res = self.send.try_send(byte);
-            if res.is_err() {
-                return;
-            }
-            if self.pending_from < self.buf.len() {
-                self.pending_from += 1;
-            } else {
-                self.pending_from = 0;
-            }
-        }
-        while self.pending_from < self.pending_to {
-            let byte = self.buf[self.pending_from];
-            let res = self.send.try_send(byte);
-            if res.is_err() {
-                return;
-            }
-            self.pending_from += 1;
-        }
-    }
-
-    fn get_write_buf(&mut self) -> &mut [i16] {
-        self.consume();
-        if self.pending_from == self.pending_to {
-            self.pending_from = 0;
-            self.pending_to = self.buf.len();
-            return &mut self.buf;
-        }
-        if self.pending_from < self.pending_to {
-            let start = self.pending_to;
-            self.pending_to = self.buf.len();
-            return &mut self.buf[start..self.pending_to];
-        }
-        &mut []
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-struct AudioReader {
-    wav: Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>>,
-    recv: mpsc::Receiver<i16>,
-}
-
-#[cfg(not(target_os = "android"))]
-impl rodio::Source for AudioReader {
-    fn current_span_len(&self) -> Option<usize> {
-        None
-    }
-
-    fn channels(&self) -> u16 {
-        2
-    }
-
-    fn sample_rate(&self) -> u32 {
-        SAMPLE_RATE
-    }
-
-    fn total_duration(&self) -> Option<core::time::Duration> {
-        None
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-impl Iterator for AudioReader {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let s = self.recv.try_recv().unwrap_or_default();
-        if let Some(wav) = self.wav.as_mut() {
-            wav.write_sample(s).unwrap()
-        }
-        let s = f32::from(s) / f32::from(i16::MAX);
-        Some(s)
     }
 }

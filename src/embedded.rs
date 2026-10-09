@@ -261,10 +261,6 @@ impl<'a> Device for DeviceImpl<'a> {
         false
     }
 
-    fn get_audio_buffer(&mut self) -> &mut [i16] {
-        &mut []
-    }
-
     fn get_battery_status(&mut self) -> Option<BatteryStatus> {
         Some(BatteryStatus {
             voltage: 50,

@@ -165,9 +165,6 @@ pub trait Device: Network + Serial + Wifi {
     /// Returns true if headphones are connected.
     fn has_headphones(&mut self) -> bool;
 
-    /// Get a writable slice of free audio buffer region.
-    fn get_audio_buffer(&mut self) -> &mut [i16];
-
     fn get_battery_status(&mut self) -> Option<BatteryStatus>;
 
     fn write_main_flash(&mut self, offset: u32, data: &[u8]) -> Result<(), &'static str>;
