@@ -1,27 +1,37 @@
-use crate::{NetworkError, errors::FSError, shared::*};
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-    vec::Vec,
-};
-use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, ops::ControlFlow, str};
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::cell::Cell;
+use core::marker::PhantomData;
+use core::mem::MaybeUninit;
+use core::ops::ControlFlow;
+use core::str;
+
 use critical_section::Mutex;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
+use embedded_sdmmc::filesystem::ToShortFileName;
 use embedded_sdmmc::{
     LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, SdCard, ShortFileName, VolumeIdx,
-    VolumeManager, filesystem::ToShortFileName,
+    VolumeManager,
 };
-use esp_bootloader_esp_idf::{
-    ota::Ota,
-    partitions::{AppPartitionSubType, DataPartitionSubType, PartitionType, read_partition_table},
+use esp_bootloader_esp_idf::ota::Ota;
+use esp_bootloader_esp_idf::partitions::{
+    AppPartitionSubType, DataPartitionSubType, PartitionType, read_partition_table,
 };
-use esp_hal::{
-    Blocking, delay::Delay, gpio::Output, rng::Rng, spi::master::Spi, uart::Uart,
-    usb::usb_serial_jtag::UsbSerialJtag,
-};
+use esp_hal::Blocking;
+use esp_hal::delay::Delay;
+use esp_hal::gpio::Output;
+use esp_hal::rng::Rng;
+use esp_hal::spi::master::Spi;
+use esp_hal::uart::Uart;
+use esp_hal::usb::usb_serial_jtag::UsbSerialJtag;
 use esp_storage::{FlashStorage, FlashStorageError};
 use firefly_types::Encode;
+
+use crate::NetworkError;
+use crate::errors::FSError;
+use crate::shared::*;
 
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
 type Sd = SdCard<SdSpi, Delay>;

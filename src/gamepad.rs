@@ -1,6 +1,7 @@
-use crate::shared::*;
 use gilrs::ev::state::AxisData;
 use gilrs::*;
+
+use crate::shared::*;
 
 /// A gilrs-powered gamepad input reader.
 ///

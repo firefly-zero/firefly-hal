@@ -1,9 +1,11 @@
-use crate::errors::*;
 use alloc::boxed::Box;
 use alloc::string::String;
 use core::fmt::Display;
 use core::ops::*;
+
 use firefly_types::spi::SendStatus;
+
+use crate::errors::*;
 
 pub const SAMPLE_RATE: u32 = 44_100;
 

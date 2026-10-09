@@ -1,5 +1,3 @@
-use crate::gamepad::GamepadManager;
-use crate::*;
 use alloc::boxed::Box;
 use core::cell::Cell;
 use core::fmt::Display;
@@ -9,6 +7,9 @@ use std::io::{Read, Write};
 use std::net::{SocketAddrV4, TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
 use std::sync::mpsc;
+
+use crate::gamepad::GamepadManager;
+use crate::*;
 
 const UDP_PORT_MIN: u16 = 3110;
 const UDP_PORT_MAX: u16 = 3117;

@@ -4,7 +4,7 @@ force_explicit_abi = false
 
 ## Uncomment when stabilized:
 # imports_granularity = "Module"
-# group_imports = "One"
+# group_imports = "StdExternalCrate"
 # hex_literal_case = "Lower"
 # normalize_comments = true
 # normalize_doc_attributes = true

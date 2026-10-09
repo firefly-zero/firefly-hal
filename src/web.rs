@@ -1,9 +1,11 @@
-use crate::gamepad::GamepadManager;
-use crate::shared::*;
 use core::fmt::Display;
+
 use rust_embed::RustEmbed;
 use vfs::FileSystem;
 use wasm_bindgen::prelude::*;
+
+use crate::gamepad::GamepadManager;
+use crate::shared::*;
 
 #[derive(RustEmbed, Debug)]
 #[folder = "/home/gram/.local/share/firefly"]
