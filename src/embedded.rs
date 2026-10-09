@@ -1,11 +1,11 @@
 use crate::{NetworkError, errors::FSError, shared::*};
 use alloc::{
     boxed::Box,
-    rc::Rc,
     string::{String, ToString},
     vec::Vec,
 };
-use core::{cell::RefCell, marker::PhantomData, ops::ControlFlow, str};
+use core::{cell::Cell, marker::PhantomData, mem::MaybeUninit, ops::ControlFlow, str};
+use critical_section::Mutex;
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_io::Read;
 use embedded_sdmmc::{
@@ -24,13 +24,28 @@ use esp_storage::{FlashStorage, FlashStorageError};
 use firefly_types::Encode;
 
 type SdSpi = ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>;
-type SD = SdCard<SdSpi, Delay>;
-type VM = VolumeManager<SD, FakeTimesource, 48, 12, 1>;
+type Sd = SdCard<SdSpi, Delay>;
+type Vm = VolumeManager<Sd, FakeTimesource, 48, 12, 1>;
+
+static VM: Mutex<Cell<MaybeUninit<Vm>>> = Mutex::new(Cell::new(MaybeUninit::uninit()));
+
+fn set_vm(vm: Vm) {
+    critical_section::with(|cs| {
+        VM.borrow(cs).set(MaybeUninit::new(vm));
+    })
+}
+
+fn exec_vm<R, F: FnOnce(&mut Vm) -> R>(f: F) -> R {
+    critical_section::with(|cs| unsafe {
+        let vm = &mut *VM.borrow(cs).as_ptr();
+        let vm = vm.assume_init_mut();
+        f(vm)
+    })
+}
 
 pub struct DeviceImpl<'a> {
     delay: Delay,
     volume: RawVolume,
-    vm: Rc<RefCell<VM>>,
     io_uart: Uart<'a, Blocking>,
     usb_serial: UsbSerialJtag<'a, Blocking>,
     flash: FlashStorage<'a>,
@@ -41,6 +56,9 @@ pub struct DeviceImpl<'a> {
 }
 
 impl<'a> DeviceImpl<'a> {
+    /// Initialize device peripherals.
+    ///
+    /// Must be called in runtime exactly once.
     pub fn new(
         sd_spi: SdSpi,
         io_uart: Uart<'a, Blocking>,
@@ -48,7 +66,7 @@ impl<'a> DeviceImpl<'a> {
         flash: FlashStorage<'a>,
     ) -> Result<Self, NetworkError> {
         let sdcard = SdCard::new(sd_spi, Delay::new());
-        let volume_manager: VM = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
+        let volume_manager: Vm = VolumeManager::new_with_limits(sdcard, FakeTimesource {}, 5000);
         let volume = match volume_manager.open_volume(VolumeIdx(0)) {
             Ok(volume) => volume,
             Err(err) => {
@@ -58,11 +76,11 @@ impl<'a> DeviceImpl<'a> {
             }
         };
         let volume = volume.to_raw_volume();
+        set_vm(volume_manager);
 
         let mut device = Self {
             delay: Delay::new(),
             volume,
-            vm: Rc::new(RefCell::new(volume_manager)),
             io_uart,
             usb_serial,
             addr: Default::default(),
@@ -117,12 +135,12 @@ impl<'a> DeviceImpl<'a> {
 /// If the name is a valid FAT-16 short name, use that name directly.
 /// Otherwise, iterate through all items in the directory, find an entry
 /// with the given long name, get its short name, and use that to open the directory.
-fn open_dir(manager: &mut VM, dir: RawDirectory, name: &str) -> Result<RawDirectory, FSError> {
+fn open_dir(manager: &mut Vm, dir: RawDirectory, name: &str) -> Result<RawDirectory, FSError> {
     let short_name = get_short_name(manager, dir, name)?;
     Ok(manager.open_dir(dir, short_name)?)
 }
 
-fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFileName, FSError> {
+fn get_short_name(manager: &Vm, dir: RawDirectory, name: &str) -> Result<ShortFileName, FSError> {
     if let Ok(short_name) = name.to_short_filename() {
         return Ok(short_name);
     }
@@ -148,7 +166,7 @@ fn get_short_name(manager: &VM, dir: RawDirectory, name: &str) -> Result<ShortFi
 
 /// Open a file in a dir and close the dir. Long file names are supported.
 fn open_file(
-    manager: &VM,
+    manager: &Vm,
     dir: RawDirectory,
     file_name: &str,
     mode: Mode,
@@ -218,16 +236,14 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn open_dir(&mut self, path: &[&str]) -> Result<DirImpl, FSError> {
-        let mut manager = self.vm.borrow_mut();
-        let mut dir = manager.open_root_dir(self.volume)?;
-        for part in path {
-            let open_res = open_dir(&mut manager, dir, part);
-            _ = manager.close_dir(dir);
-            dir = open_res?;
-        }
-        Ok(DirImpl {
-            dir,
-            vm: self.vm.clone(),
+        exec_vm(|manager| {
+            let mut dir = manager.open_root_dir(self.volume)?;
+            for part in path {
+                let open_res = open_dir(manager, dir, part);
+                _ = manager.close_dir(dir);
+                dir = open_res?;
+            }
+            Ok(DirImpl { dir })
         })
     }
 
@@ -317,7 +333,6 @@ impl<'a> Device for DeviceImpl<'a> {
 }
 
 pub struct DirImpl {
-    vm: Rc<RefCell<VM>>,
     dir: RawDirectory,
 }
 
@@ -326,101 +341,100 @@ impl Dir for DirImpl {
     type Write = FileW;
 
     fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
-        Ok(FileR {
-            vm: Rc::clone(&self.vm),
-            file,
+        exec_vm(|manager| {
+            let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
+            Ok(FileR { file })
         })
     }
 
     fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, self.dir, name, Mode::ReadWriteCreateOrTruncate)?;
-        Ok(FileW {
-            vm: Rc::clone(&self.vm),
-            file,
+        exec_vm(|manager| {
+            let file = open_file(manager, self.dir, name, Mode::ReadWriteCreateOrTruncate)?;
+            Ok(FileW { file })
         })
     }
 
     fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, self.dir, name, Mode::ReadWriteAppend)?;
-        Ok(FileW {
-            vm: Rc::clone(&self.vm),
-            file,
+        exec_vm(|manager| {
+            let file = open_file(manager, self.dir, name, Mode::ReadWriteAppend)?;
+            Ok(FileW { file })
         })
     }
 
     fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
-        let manager = &self.vm.borrow();
-        let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
-        let size = manager.file_length(file)?;
-        _ = manager.close_file(file);
-        Ok(size)
+        exec_vm(|manager| {
+            let file = open_file(manager, self.dir, name, Mode::ReadOnly)?;
+            let size = manager.file_length(file)?;
+            _ = manager.close_file(file);
+            Ok(size)
+        })
     }
 
     fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
-        let manager = &self.vm.borrow();
-        let short_name = match get_short_name(manager, self.dir, name) {
-            Ok(short_name) => short_name,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-        let res = manager.delete_entry_in_dir(self.dir, short_name);
-        res?;
-        Ok(())
+        exec_vm(|manager| {
+            let short_name = match get_short_name(manager, self.dir, name) {
+                Ok(short_name) => short_name,
+                Err(err) => {
+                    return Err(err);
+                }
+            };
+            let res = manager.delete_entry_in_dir(self.dir, short_name);
+            res?;
+            Ok(())
+        })
     }
 
     fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
-        let manager = &self.vm.borrow();
-        let dir = self.dir.to_directory(manager);
-        dir.make_dir_in_dir(name)?;
-        Ok(())
+        exec_vm(|manager| {
+            let dir = self.dir.to_directory(manager);
+            dir.make_dir_in_dir(name)?;
+            Ok(())
+        })
     }
 
     fn remove_dir(self) -> Result<(), FSError> {
-        let manager = &self.vm.borrow();
-        let dir = self.dir.to_directory(manager);
-        let mut names = Vec::new();
-        dir.iterate_dir(|entry| {
-            let name_str = entry.name.to_string();
-            if &name_str != "." && &name_str != ".." {
-                names.push(entry.name);
+        exec_vm(|manager| {
+            let dir = self.dir.to_directory(manager);
+            let mut names = Vec::new();
+            dir.iterate_dir(|entry| {
+                let name_str = entry.name.to_string();
+                if &name_str != "." && &name_str != ".." {
+                    names.push(entry.name);
+                }
+                ControlFlow::Continue(())
+            })?;
+            for name in names {
+                dir.delete_entry_in_dir(name)?;
             }
-            ControlFlow::Continue(())
-        })?;
-        for name in names {
-            dir.delete_entry_in_dir(name)?;
-        }
-        // TODO: Use `delete_entry_in_dir` to delete the current dir from the parent.
-        Ok(())
+            // TODO: Use `delete_entry_in_dir` to delete the current dir from the parent.
+            Ok(())
+        })
     }
 
     fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
     where
         F: FnMut(crate::EntryKind, &[u8]),
     {
-        let manager = &self.vm.borrow();
         let mut buf = [0u8; 64];
         let mut lfnb = LfnBuffer::new(&mut buf);
-        manager.iterate_dir_lfn(self.dir, &mut lfnb, |entry, long_name| {
-            let base_name = entry.name.base_name();
-            if base_name.first() == Some(&b'.') {
-                return ControlFlow::Continue(());
-            }
-            let name = match long_name {
-                Some(long_name) => long_name.trim_ascii().as_bytes(),
-                None => base_name,
-            };
-            let kind = if entry.attributes.is_directory() {
-                EntryKind::Dir
-            } else {
-                EntryKind::File
-            };
-            f(kind, name);
-            ControlFlow::Continue(())
+        exec_vm(|manager| {
+            manager.iterate_dir_lfn(self.dir, &mut lfnb, |entry, long_name| {
+                let base_name = entry.name.base_name();
+                if base_name.first() == Some(&b'.') {
+                    return ControlFlow::Continue(());
+                }
+                let name = match long_name {
+                    Some(long_name) => long_name.trim_ascii().as_bytes(),
+                    None => base_name,
+                };
+                let kind = if entry.attributes.is_directory() {
+                    EntryKind::Dir
+                } else {
+                    EntryKind::File
+                };
+                f(kind, name);
+                ControlFlow::Continue(())
+            })
         })?;
         Ok(())
     }
@@ -428,8 +442,9 @@ impl Dir for DirImpl {
 
 impl Drop for DirImpl {
     fn drop(&mut self) {
-        let manager = &self.vm.borrow();
-        _ = manager.close_dir(self.dir);
+        exec_vm(|manager| {
+            _ = manager.close_dir(self.dir);
+        })
     }
 }
 
@@ -478,7 +493,6 @@ fn format_pad(raw: (u16, u16)) -> Pad {
 }
 
 pub struct FileW {
-    vm: Rc<RefCell<VM>>,
     file: embedded_sdmmc::RawFile,
 }
 
@@ -488,31 +502,29 @@ impl embedded_io::ErrorType for FileW {
 
 impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let manager = &self.vm.borrow();
-        match manager.write(self.file, buf) {
+        exec_vm(|manager| match manager.write(self.file, buf) {
             Ok(()) => Ok(buf.len()),
             Err(_) => Err(embedded_io::ErrorKind::Other),
-        }
+        })
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        let manager = &self.vm.borrow();
-        match manager.flush_file(self.file) {
+        exec_vm(|manager| match manager.flush_file(self.file) {
             Ok(()) => Ok(()),
             Err(_) => Err(embedded_io::ErrorKind::Other),
-        }
+        })
     }
 }
 
 impl Drop for FileW {
     fn drop(&mut self) {
-        let manager = &self.vm.borrow();
-        _ = manager.close_file(self.file);
+        exec_vm(|manager| {
+            _ = manager.close_file(self.file);
+        })
     }
 }
 
 pub struct FileR {
-    vm: Rc<RefCell<VM>>,
     file: embedded_sdmmc::RawFile,
 }
 
@@ -522,23 +534,23 @@ impl embedded_io::ErrorType for FileR {
 
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        let manager = &self.vm.borrow();
-        match manager.read(self.file, buf) {
+        exec_vm(|manager| match manager.read(self.file, buf) {
             Ok(size) => Ok(size),
             Err(_) => Err(embedded_io::ErrorKind::Other),
-        }
+        })
     }
 }
 impl embedded_io::Seek for FileR {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
-        let manager = &self.vm.borrow();
         use embedded_io::SeekFrom::*;
-        let res = match pos {
-            Start(n) => manager.file_seek_from_start(self.file, n as u32),
-            End(n) => manager.file_seek_from_end(self.file, n as u32),
-            Current(n) => manager.file_seek_from_current(self.file, n as i32),
-        };
-        let res = res.and_then(|_| manager.file_offset(self.file));
+        let res = exec_vm(|manager| {
+            let res = match pos {
+                Start(n) => manager.file_seek_from_start(self.file, n as u32),
+                End(n) => manager.file_seek_from_end(self.file, n as u32),
+                Current(n) => manager.file_seek_from_current(self.file, n as i32),
+            };
+            res.and_then(|_| manager.file_offset(self.file))
+        });
         match res {
             Ok(size) => Ok(size as u64),
             Err(_) => Err(embedded_io::ErrorKind::Other),
@@ -548,8 +560,9 @@ impl embedded_io::Seek for FileR {
 
 impl Drop for FileR {
     fn drop(&mut self) {
-        let manager = &self.vm.borrow();
-        _ = manager.close_file(self.file);
+        exec_vm(|manager| {
+            _ = manager.close_file(self.file);
+        })
     }
 }
 

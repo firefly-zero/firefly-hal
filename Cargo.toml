@@ -38,20 +38,23 @@ macroquad = "0.4"
 
 # embedded
 [target.'cfg(target_os = "none")'.dependencies]
-# work with the SD card
+# Frames for communicting through serial port.
+cobs = { version = "0.5.1", default-features = false }
+# Mutex for safe access to SD card from the audio core.
+critical-section = "1.2.0"
+# Work with the SD card.
 embedded-sdmmc = { version = "0.10.0", default-features = false }
 embedded-hal-bus = { version = "0.3.0", default-features = false }
 embedded-io = { version = "0.6.1", default-features = false }
-# allocator, for allocating slices in PSRAM
+# Allocator, for allocating slices in PSRAM.
 esp-alloc = { version = "0.11.0", features = ["esp32s3", "nightly"] }
 esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3"] }
 esp-hal = { version = "1.2.2", features = ["esp32s3", "unstable"] }
-esp-storage = { version = "0.10.0", features = ["esp32s3"] }
-embedded-hal = { version = "1.0.0" }
-# frames for communicting through serial port
-cobs = { version = "0.5.1", default-features = false }
-# fast f32 approximation math for calibrating touchpad
 micromath = { version = "2.1.0", default-features = false }
 # Not a direct dependency but needs to be explicitly locked.
-# Otherwise, cargo resolves it to 0.1.4
+# Otherwise, cargo resolves it to 0.1.4.
 esp-rom-sys = "0.1.5"
+# Access flash memory, used for OTA.
+esp-storage = { version = "0.10.0", features = ["esp32s3"] }
+embedded-hal = { version = "1.0.0" }
+# Fast f32 approximation math for calibrating touchpad.

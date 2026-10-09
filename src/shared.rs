@@ -393,18 +393,3 @@ pub struct BatteryStatus {
     /// If true, the device is fully charged.
     pub full: bool,
 }
-
-// (func (param $originalPtr i32)
-//   (param $originalSize i32)
-//   (param $alignment i32)
-//   (param $newSize i32)
-//   (result i32))
-
-// sample rate
-// channels
-
-// volume
-// speed
-// play/pause
-// stop
-// play_next
