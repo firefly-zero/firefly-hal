@@ -919,7 +919,7 @@ dependencies = [
 
 [[package]]
 name = "firefly-hal"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
  "cobs 0.5.1",
  "critical-section",
