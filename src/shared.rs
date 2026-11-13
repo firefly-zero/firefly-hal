@@ -175,6 +175,7 @@ pub trait Device: Network + Serial + Wifi {
 
 pub(crate) type NetworkResult<T> = Result<T, NetworkError>;
 
+/// Manage peer-to-peer networking for multiplayer.
 pub trait Network {
     /// The type representing the network address. Must be unique.
     ///
@@ -207,6 +208,7 @@ pub trait Network {
     fn net_send_status(&mut self, addr: Self::Addr) -> NetworkResult<SendStatus>;
 }
 
+/// Manage Wi-Fi and TCP connections for installing apps.
 pub trait Wifi {
     fn wifi_scan(&mut self) -> NetworkResult<[String; 6]>;
     fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()>;

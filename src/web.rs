@@ -5,11 +5,18 @@ use vfs::FileSystem;
 use wasm_bindgen::prelude::*;
 
 use crate::gamepad::GamepadManager;
-use crate::shared::*;
+use crate::{FSError, shared::*};
 
 #[derive(RustEmbed, Debug)]
 #[folder = "/home/gram/.local/share/firefly"]
 struct Vfs;
+
+static mut VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
+
+#[expect(static_mut_refs)]
+fn get_vfs() -> &'static mut vfs::EmbeddedFS<Vfs> {
+    unsafe { VFS.as_mut().unwrap() }
+}
 
 #[wasm_bindgen]
 extern {
@@ -18,35 +25,39 @@ extern {
 
     #[wasm_bindgen(js_namespace = console, js_name = error)]
     fn console_error(msg: &str);
+
+    #[wasm_bindgen(js_namespace = Math, js_name = random)]
+    fn math_random() -> f64;
 }
 
 pub struct DeviceImpl {
-    // start:      std::time::Instant,
+    start: f64,
     gamepad: GamepadManager,
-    vfs: vfs::impls::embedded::EmbeddedFS<Vfs>,
     perf: web_sys::Performance,
+    wifi_status: firefly_types::wifi::Status,
 }
 
 impl DeviceImpl {
-    #[allow(clippy::new_without_default)]
     pub fn new(_: std::path::PathBuf) -> Self {
+        unsafe { VFS = Some(vfs::EmbeddedFS::new()) };
         let window = web_sys::window().unwrap();
+        let perf = window.performance().unwrap();
         Self {
             gamepad: GamepadManager::new(),
-            vfs: vfs::EmbeddedFS::new(),
-            perf: window.performance().unwrap(),
+            start: perf.now(),
+            perf,
+            wifi_status: firefly_types::wifi::Status::Stopped,
         }
     }
 }
 
 impl Device for DeviceImpl {
-    type Read = FileR;
-    type Write = FileW;
+    type Dir = DirImpl;
 
     fn now(&self) -> Instant {
-        Instant {
-            ns: self.perf.now() as u32 * 1_000_000,
-        }
+        let ms = self.perf.now() - self.start;
+        let us = ms as u32 * 1000;
+        Instant { us }
     }
 
     fn delay(&self, _d: Duration) {
@@ -58,61 +69,260 @@ impl Device for DeviceImpl {
         self.gamepad.read_input()
     }
 
-    fn log_debug<D: Display>(&self, src: &str, msg: D) {
+    fn log_debug<D: Display>(&mut self, src: &str, msg: D) {
         console_log(&format!("{src}: {msg}"))
     }
 
-    fn log_error<D: Display>(&self, src: &str, msg: D) {
+    fn log_error<D: Display>(&mut self, src: &str, msg: D) {
         console_error(&format!("{src}: {msg}"))
     }
 
-    fn open_file(&self, path: &[&str]) -> Option<Self::Read> {
-        let path = path.join("/");
-        let file = self.vfs.open_file(&format!("/{path}")).ok()?;
-        Some(FileR { file })
+    fn get_name(&mut self) -> Option<&'static str> {
+        None
     }
 
-    fn create_file(&self, path: &[&str]) -> Option<Self::Write> {
-        let path = path.join("/");
-        let file = self.vfs.create_file(&format!("/{path}")).ok()?;
-        Some(FileW { file })
+    fn random(&mut self) -> u32 {
+        math_random() as u32
     }
 
-    fn get_file_size(&self, path: &[&str]) -> Option<u32> {
+    fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
         let path = path.join("/");
-        let meta = self.vfs.metadata(&format!("/{path}")).ok()?;
-        Some(meta.len as u32)
+        let path = format!("/{path}");
+        let vfs = get_vfs();
+        if !vfs.exists(&path).unwrap_or_default() {
+            return Err(FSError::NotFound);
+        }
+        Ok(DirImpl { root: path })
     }
 
-    fn make_dir(&self, path: &[&str]) -> bool {
-        let path = path.join("/");
-        self.vfs.create_dir(&format!("/{path}")).is_ok()
+    fn has_headphones(&mut self) -> bool {
+        false
     }
 
-    fn remove_file(&self, path: &[&str]) -> bool {
-        let path = path.join("/");
-        self.vfs.remove_file(&format!("/{path}")).is_ok()
+    fn get_battery_status(&mut self) -> Option<BatteryStatus> {
+        None
     }
 
-    fn iter_dir<F>(&self, path: &[&str], mut f: F) -> bool
+    fn write_main_flash(&mut self, _offset: u32, _data: &[u8]) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn write_io_flash(&mut self, _offset: u32, _data: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn switch_main_partition(&mut self, _part: u8) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn switch_io_partition(&mut self, _part: u8) -> NetworkResult<()> {
+        Ok(())
+    }
+}
+
+impl Wifi for DeviceImpl {
+    fn wifi_scan(&mut self) -> NetworkResult<[String; 6]> {
+        let points = ["Default Network", "", "", "", "", ""];
+        let points = points.map(|s| s.to_string());
+        Ok(points)
+    }
+
+    fn wifi_connect(&mut self, ssid: &str, pass: &str) -> NetworkResult<()> {
+        use firefly_types::wifi::{DisconnectReason, Status};
+        self.wifi_status = if ssid != "Default Network" {
+            Status::Disconnected(DisconnectReason::NoApFound)
+        } else if pass == "invalid" {
+            Status::Disconnected(DisconnectReason::AuthFail)
+        } else {
+            Status::Initializing
+        };
+        Ok(())
+    }
+
+    fn wifi_status(&mut self) -> NetworkResult<u8> {
+        use firefly_types::wifi::Status;
+        if self.wifi_status == Status::Initializing {
+            self.wifi_status = Status::Connected;
+        }
+        Ok(self.wifi_status.into())
+    }
+
+    fn wifi_disconnect(&mut self) -> NetworkResult<()> {
+        self.wifi_status = firefly_types::wifi::Status::Stopped;
+        Ok(())
+    }
+
+    fn tcp_connect(&mut self, _ip: u32, _port: u16) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn tcp_status(&mut self) -> NetworkResult<u8> {
+        Ok(0)
+    }
+
+    fn tcp_send(&mut self, _data: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn tcp_recv(&mut self) -> NetworkResult<Box<[u8]>> {
+        Ok(Box::new([]))
+    }
+
+    fn tcp_close(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+}
+
+pub type Addr = ();
+
+impl Network for DeviceImpl {
+    type Addr = ();
+
+    fn net_start(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn net_stop(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn net_local_addr(&self) -> Self::Addr {}
+
+    fn net_advertise(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn net_recv(&mut self) -> NetworkResult<Option<(Self::Addr, Box<[u8]>)>> {
+        Ok(None)
+    }
+
+    fn net_send(&mut self, _addr: Self::Addr, _dataa: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn net_send_status(
+        &mut self,
+        _addr: Self::Addr,
+    ) -> NetworkResult<firefly_types::spi::SendStatus> {
+        Ok(firefly_types::spi::SendStatus::Delivered(1))
+    }
+}
+
+impl Serial for DeviceImpl {
+    fn serial_start(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn serial_stop(&mut self) -> NetworkResult<()> {
+        Ok(())
+    }
+
+    fn serial_recv(&mut self) -> NetworkResult<Option<Box<[u8]>>> {
+        Ok(None)
+    }
+
+    fn serial_send(&mut self, _data: &[u8]) -> NetworkResult<()> {
+        Ok(())
+    }
+}
+
+pub struct DirImpl {
+    root: String,
+}
+
+impl Dir for DirImpl {
+    type Read = FileR;
+    type Write = FileW;
+
+    fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.open_file(&path);
+        let Ok(file) = res else {
+            return Err(FSError::Other);
+        };
+        Ok(FileR { file })
+    }
+
+    fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.create_file(&path);
+        let Ok(file) = res else {
+            return Err(FSError::Other);
+        };
+        Ok(FileW { file })
+    }
+
+    fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.append_file(&path);
+        let Ok(file) = res else {
+            return Err(FSError::Other);
+        };
+        Ok(FileW { file })
+    }
+
+    fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.metadata(&path);
+        let Ok(meta) = res else {
+            return Err(FSError::Other);
+        };
+        Ok(meta.len as u32)
+    }
+
+    fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.remove_file(&path);
+        if res.is_err() {
+            return Err(FSError::Other);
+        }
+        Ok(())
+    }
+
+    fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
+        let path = format!("{}/{name}", self.root);
+        let vfs = get_vfs();
+        let res = vfs.create_dir(&path);
+        if res.is_err() {
+            return Err(FSError::Other);
+        }
+        Ok(())
+    }
+
+    fn remove_dir(self) -> Result<(), FSError> {
+        let vfs = get_vfs();
+        let res = vfs.remove_dir(&self.root);
+        if res.is_err() {
+            return Err(FSError::Other);
+        }
+        Ok(())
+    }
+
+    fn iter_dir<F>(&mut self, mut f: F) -> Result<(), FSError>
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        let root = path.join("/");
-        let Ok(entries) = self.vfs.read_dir(&format!("/{root}")) else {
-            return false;
-        };
-        for path in entries {
-            let path = format!("/{root}/{path}");
-            let meta = self.vfs.metadata(&path).unwrap();
-            let kind = match meta.file_type {
-                vfs::VfsFileType::File => EntryKind::File,
-                vfs::VfsFileType::Directory => EntryKind::Dir,
+        let entries = std::fs::read_dir(&self.root)?;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            let kind = if path.is_dir() {
+                EntryKind::Dir
+            } else if path.is_file() {
+                EntryKind::File
+            } else {
+                continue;
             };
-            let fname = path.split('/').last().unwrap();
-            f(kind, fname.as_bytes());
+            let fname = entry.file_name();
+            let fname = fname.as_encoded_bytes();
+            f(kind, fname);
         }
-        true
+        Ok(())
     }
 }
 
@@ -123,6 +333,12 @@ pub struct FileR {
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         std::io::Read::read(&mut self.file, buf)
+    }
+}
+
+impl embedded_io::Seek for FileR {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        self.file.seek(pos.into())
     }
 }
 
