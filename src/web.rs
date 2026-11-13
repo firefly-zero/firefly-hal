@@ -1,4 +1,5 @@
 use core::fmt::Display;
+use core::marker::PhantomData;
 
 use rust_embed::RustEmbed;
 use vfs::FileSystem;
@@ -30,15 +31,19 @@ extern {
     fn math_random() -> f64;
 }
 
-pub struct DeviceImpl {
+#[derive(Default)]
+pub struct DeviceConfig {}
+
+pub struct DeviceImpl<'a> {
     start: f64,
     gamepad: GamepadManager,
     perf: web_sys::Performance,
     wifi_status: firefly_types::wifi::Status,
+    nothing: PhantomData<&'a str>,
 }
 
-impl DeviceImpl {
-    pub fn new(_: std::path::PathBuf) -> Self {
+impl<'a> DeviceImpl<'a> {
+    pub fn new(_: DeviceConfig) -> Self {
         unsafe { VFS = Some(vfs::EmbeddedFS::new()) };
         let window = web_sys::window().unwrap();
         let perf = window.performance().unwrap();
@@ -47,11 +52,16 @@ impl DeviceImpl {
             start: perf.now(),
             perf,
             wifi_status: firefly_types::wifi::Status::Stopped,
+            nothing: PhantomData,
         }
+    }
+
+    pub fn alloc_psram(&self, size: usize) -> Vec<u8> {
+        Vec::with_capacity(size)
     }
 }
 
-impl Device for DeviceImpl {
+impl<'a> Device for DeviceImpl<'a> {
     type Dir = DirImpl;
 
     fn now(&self) -> Instant {
@@ -120,7 +130,7 @@ impl Device for DeviceImpl {
     }
 }
 
-impl Wifi for DeviceImpl {
+impl<'a> Wifi for DeviceImpl<'a> {
     fn wifi_scan(&mut self) -> NetworkResult<[String; 6]> {
         let points = ["Default Network", "", "", "", "", ""];
         let points = points.map(|s| s.to_string());
@@ -175,7 +185,7 @@ impl Wifi for DeviceImpl {
 
 pub type Addr = ();
 
-impl Network for DeviceImpl {
+impl<'a> Network for DeviceImpl<'a> {
     type Addr = ();
 
     fn net_start(&mut self) -> NetworkResult<()> {
@@ -208,7 +218,7 @@ impl Network for DeviceImpl {
     }
 }
 
-impl Serial for DeviceImpl {
+impl<'a> Serial for DeviceImpl<'a> {
     fn serial_start(&mut self) -> NetworkResult<()> {
         Ok(())
     }
