@@ -9,7 +9,7 @@ use crate::gamepad::GamepadManager;
 use crate::{FSError, shared::*};
 
 #[derive(RustEmbed, Debug)]
-#[folder = "/home/gram/.local/share/firefly"]
+#[folder = "/home/gram/ff/misc/firefly-web/.firefly"]
 struct Vfs;
 
 static mut VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
@@ -54,6 +54,11 @@ impl<'a> DeviceImpl<'a> {
             wifi_status: firefly_types::wifi::Status::Stopped,
             nothing: PhantomData,
         }
+    }
+
+    /// Called by the GUI to set input from UI and keyboard.
+    pub fn update_input(&mut self, input: InputState) {
+        self.gamepad.update_input(input)
     }
 
     pub fn alloc_psram(&self, size: usize) -> Vec<u8> {
@@ -247,69 +252,48 @@ impl Dir for DirImpl {
     fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.open_file(&path);
-        let Ok(file) = res else {
-            return Err(FSError::Other);
-        };
+        let file = wrap(vfs.open_file(&path))?;
         Ok(FileR { file })
     }
 
     fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.create_file(&path);
-        let Ok(file) = res else {
-            return Err(FSError::Other);
-        };
+        let file = wrap(vfs.create_file(&path))?;
         Ok(FileW { file })
     }
 
     fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.append_file(&path);
-        let Ok(file) = res else {
-            return Err(FSError::Other);
-        };
+        let file = wrap(vfs.append_file(&path))?;
         Ok(FileW { file })
     }
 
     fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.metadata(&path);
-        let Ok(meta) = res else {
-            return Err(FSError::Other);
-        };
+        let meta = wrap(vfs.metadata(&path))?;
         Ok(meta.len as u32)
     }
 
     fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.remove_file(&path);
-        if res.is_err() {
-            return Err(FSError::Other);
-        }
+        wrap(vfs.remove_file(&path))?;
         Ok(())
     }
 
     fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
         let path = format!("{}/{name}", self.root);
         let vfs = get_vfs();
-        let res = vfs.create_dir(&path);
-        if res.is_err() {
-            return Err(FSError::Other);
-        }
+        wrap(vfs.create_dir(&path))?;
         Ok(())
     }
 
     fn remove_dir(self) -> Result<(), FSError> {
         let vfs = get_vfs();
-        let res = vfs.remove_dir(&self.root);
-        if res.is_err() {
-            return Err(FSError::Other);
-        }
+        wrap(vfs.remove_dir(&self.root))?;
         Ok(())
     }
 
@@ -317,19 +301,19 @@ impl Dir for DirImpl {
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        let entries = std::fs::read_dir(&self.root)?;
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            let kind = if path.is_dir() {
+        let vfs = get_vfs();
+        let entries = wrap(vfs.read_dir(&self.root))?;
+        for fname in entries {
+            let path = format!("{}/{fname}", self.root);
+            let meta = wrap(vfs.metadata(&path))?;
+            let kind = if meta.file_type == vfs::VfsFileType::Directory {
                 EntryKind::Dir
-            } else if path.is_file() {
+            } else if meta.file_type == vfs::VfsFileType::File {
                 EntryKind::File
             } else {
                 continue;
             };
-            let fname = entry.file_name();
-            let fname = fname.as_encoded_bytes();
+            let fname = fname.as_bytes();
             f(kind, fname);
         }
         Ok(())
@@ -372,4 +356,15 @@ impl embedded_io::Write for FileW {
 
 impl embedded_io::ErrorType for FileW {
     type Error = std::io::Error;
+}
+
+fn wrap<T>(r: Result<T, vfs::VfsError>) -> Result<T, FSError> {
+    use vfs::error::VfsErrorKind;
+    match r {
+        Ok(v) => Ok(v),
+        Err(err) => match err.kind() {
+            VfsErrorKind::FileNotFound => Err(FSError::NotFound),
+            _ => Err(FSError::DeviceError(format!("{err}"))),
+        },
+    }
 }
