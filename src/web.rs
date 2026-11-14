@@ -12,11 +12,15 @@ use crate::{FSError, shared::*};
 #[folder = "$VFS"]
 struct Vfs;
 
-static mut VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
+static mut RO_VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
+static mut RW_VFS: Option<&'static mut vfs::MemoryFS> = None;
 
 #[expect(static_mut_refs)]
-fn get_vfs() -> &'static mut vfs::EmbeddedFS<Vfs> {
-    unsafe { VFS.as_mut().unwrap() }
+fn get_vfs() -> (
+    &'static mut vfs::EmbeddedFS<Vfs>,
+    &'static mut vfs::MemoryFS,
+) {
+    unsafe { (RO_VFS.as_mut().unwrap(), RW_VFS.as_mut().unwrap()) }
 }
 
 #[wasm_bindgen]
@@ -44,7 +48,10 @@ pub struct DeviceImpl<'a> {
 
 impl<'a> DeviceImpl<'a> {
     pub fn new(_: DeviceConfig) -> Self {
-        unsafe { VFS = Some(vfs::EmbeddedFS::new()) };
+        unsafe {
+            RO_VFS = Some(vfs::EmbeddedFS::new());
+            RW_VFS = Some(vfs::MemoryFS::new());
+        }
         let window = web_sys::window().unwrap();
         let perf = window.performance().unwrap();
         Self {
@@ -103,8 +110,10 @@ impl<'a> Device for DeviceImpl<'a> {
     fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
         let path = path.join("/");
         let path = format!("/{path}");
-        let vfs = get_vfs();
-        if !vfs.exists(&path).unwrap_or_default() {
+        let (ro_vfs, rw_vfs) = get_vfs();
+        let in_ro = ro_vfs.exists(&path).unwrap_or_default();
+        let in_rw = rw_vfs.exists(&path).unwrap_or_default();
+        if !in_ro && !in_rw {
             return Err(FSError::NotFound);
         }
         Ok(DirImpl { root: path })
@@ -251,49 +260,80 @@ impl Dir for DirImpl {
 
     fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.open_file(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+        // if rw_vfs.exists(&path).unwrap_or_default() {
+        //     let file = wrap(rw_vfs.open_file(&path))?;
+        //     return Ok(FileR { file });
+        // }
+        let file = wrap(ro_vfs.open_file(&path))?;
         Ok(FileR { file })
     }
 
     fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.create_file(&path))?;
+        let (_, rw_vfs) = get_vfs();
+        // mkdir_all(&path, rw_vfs);
+        let file = wrap(rw_vfs.create_file(&path))?;
         Ok(FileW { file })
     }
 
     fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.append_file(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+
+        // // If file doesn't exist yet in the writable vfs, copy it from readonly vfs.
+        // let in_rw = rw_vfs.exists(&path).unwrap_or_default();
+        // let in_ro = ro_vfs.exists(&path).unwrap_or_default();
+        // if in_ro && !in_rw {
+        //     mkdir_all(&path, rw_vfs);
+        //     let mut file_from = wrap(ro_vfs.open_file(&path))?;
+        //     let mut buf = Vec::new();
+        //     _ = file_from.read_to_end(&mut buf);
+        //     let mut file_to = wrap(ro_vfs.create_file(&path))?;
+        //     _ = file_to.write_all(&buf);
+        // }
+
+        let file = wrap(rw_vfs.append_file(&path))?;
         Ok(FileW { file })
     }
 
     fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let meta = wrap(vfs.metadata(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+        // let in_rw = rw_vfs.exists(&path).unwrap_or_default();
+        // if in_rw {
+        //     let meta = wrap(rw_vfs.metadata(&path))?;
+        //     return Ok(meta.len as u32);
+        // }
+        let meta = wrap(ro_vfs.metadata(&path))?;
         Ok(meta.len as u32)
     }
 
     fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        wrap(vfs.remove_file(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+        // let in_ro = ro_vfs.exists(&path).unwrap_or_default();
+        // if in_ro {
+        //     return Err(FSError::FormatError("the file is readonly, cannot remove"));
+        // }
+        // wrap(rw_vfs.remove_file(&path))?;
         Ok(())
     }
 
     fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
-        let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        wrap(vfs.create_dir(&path))?;
+        // let path = format!("{}/{name}", self.root);
+        // let (_, rw_vfs) = get_vfs();
+        // mkdir_all(&path, rw_vfs);
         Ok(())
     }
 
     fn remove_dir(self) -> Result<(), FSError> {
-        let vfs = get_vfs();
-        wrap(vfs.remove_dir(&self.root))?;
+        // let (ro_vfs, rw_vfs) = get_vfs();
+        // let in_ro = ro_vfs.exists(&self.root).unwrap_or_default();
+        // if in_ro {
+        //     return Err(FSError::FormatError("the file is readonly, cannot remove"));
+        // }
+        // wrap(rw_vfs.remove_dir(&self.root))?;
         Ok(())
     }
 
@@ -301,11 +341,12 @@ impl Dir for DirImpl {
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        let vfs = get_vfs();
-        let entries = wrap(vfs.read_dir(&self.root))?;
-        for fname in entries {
+        let (ro_vfs, rw_vfs) = get_vfs();
+
+        let ro_entries = wrap(ro_vfs.read_dir(&self.root))?;
+        for fname in ro_entries {
             let path = format!("{}/{fname}", self.root);
-            let meta = wrap(vfs.metadata(&path))?;
+            let meta = wrap(ro_vfs.metadata(&path))?;
             let kind = if meta.file_type == vfs::VfsFileType::Directory {
                 EntryKind::Dir
             } else if meta.file_type == vfs::VfsFileType::File {
@@ -316,7 +357,39 @@ impl Dir for DirImpl {
             let fname = fname.as_bytes();
             f(kind, fname);
         }
+
+        // if let Ok(rw_entries) = rw_vfs.read_dir(&self.root) {
+        //     for fname in rw_entries {
+        //         let path = format!("{}/{fname}", self.root);
+        //         let meta = wrap(ro_vfs.metadata(&path))?;
+        //         let kind = if meta.file_type == vfs::VfsFileType::Directory {
+        //             EntryKind::Dir
+        //         } else if meta.file_type == vfs::VfsFileType::File {
+        //             EntryKind::File
+        //         } else {
+        //             continue;
+        //         };
+        //         let fname = fname.as_bytes();
+        //         f(kind, fname);
+        //     }
+        // }
+
         Ok(())
+    }
+}
+
+fn mkdir_all(path: &str, rw_vfs: &mut vfs::MemoryFS) {
+    let path = std::path::PathBuf::from(path);
+    let mut path = path.as_path();
+    let mut parents = Vec::new();
+    while let Some(parent) = path.parent() {
+        path = parent;
+        let parent = parent.as_os_str().to_str().unwrap().to_owned();
+        parents.push(parent);
+    }
+    parents.reverse();
+    for path in parents {
+        _ = rw_vfs.create_dir(&path);
     }
 }
 
