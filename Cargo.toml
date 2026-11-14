@@ -25,7 +25,10 @@ critical-section = { version = "1.2.0", features = ["std"] }
 [target.'cfg(target_family = "wasm")'.dependencies]
 embedded-io = { version = "0.6.1", features = ["std"] }
 gilrs = "0.11.0"
-rust-embed = { version = "8.0.0", features = ["debug-embed"] }
+rust-embed = { version = "8.14.0", features = [
+    "debug-embed",
+    "interpolate-folder-path",
+] }
 vfs = { version = "0.13.0", features = ["embedded-fs"] }
 wasm-bindgen = "0.2.130"
 web-sys = { version = "0.3.107", features = ["Window", "Performance"] }

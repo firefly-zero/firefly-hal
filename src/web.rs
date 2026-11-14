@@ -9,7 +9,7 @@ use crate::gamepad::GamepadManager;
 use crate::{FSError, shared::*};
 
 #[derive(RustEmbed, Debug)]
-#[folder = "/home/gram/ff/misc/firefly-web/.firefly"]
+#[folder = "$VFS"]
 struct Vfs;
 
 static mut VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
@@ -97,7 +97,7 @@ impl<'a> Device for DeviceImpl<'a> {
     }
 
     fn random(&mut self) -> u32 {
-        math_random() as u32
+        (math_random() * u32::MAX as f64) as u32
     }
 
     fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
