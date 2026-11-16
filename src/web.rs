@@ -1,5 +1,6 @@
 use core::fmt::Display;
 use core::marker::PhantomData;
+use std::collections::HashMap;
 
 use rust_embed::RustEmbed;
 use vfs::FileSystem;
@@ -12,11 +13,16 @@ use crate::{FSError, shared::*};
 #[folder = "$VFS"]
 struct Vfs;
 
-static mut VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
+static mut RO_VFS: Option<vfs::EmbeddedFS<Vfs>> = None;
+
+static mut RW_VFS: Option<HashMap<String, Vec<u8>>> = None;
 
 #[expect(static_mut_refs)]
-fn get_vfs() -> &'static mut vfs::EmbeddedFS<Vfs> {
-    unsafe { VFS.as_mut().unwrap() }
+fn get_vfs() -> (
+    &'static mut vfs::EmbeddedFS<Vfs>,
+    &'static mut HashMap<String, Vec<u8>>,
+) {
+    unsafe { (RO_VFS.as_mut().unwrap(), RW_VFS.as_mut().unwrap()) }
 }
 
 #[wasm_bindgen]
@@ -44,7 +50,10 @@ pub struct DeviceImpl<'a> {
 
 impl<'a> DeviceImpl<'a> {
     pub fn new(_: DeviceConfig) -> Self {
-        unsafe { VFS = Some(vfs::EmbeddedFS::new()) };
+        unsafe {
+            RO_VFS = Some(vfs::EmbeddedFS::new());
+            RW_VFS = Some(HashMap::new());
+        }
         let window = web_sys::window().unwrap();
         let perf = window.performance().unwrap();
         Self {
@@ -103,10 +112,6 @@ impl<'a> Device for DeviceImpl<'a> {
     fn open_dir(&mut self, path: &[&str]) -> Result<Self::Dir, FSError> {
         let path = path.join("/");
         let path = format!("/{path}");
-        let vfs = get_vfs();
-        if !vfs.exists(&path).unwrap_or_default() {
-            return Err(FSError::NotFound);
-        }
         Ok(DirImpl { root: path })
     }
 
@@ -251,49 +256,65 @@ impl Dir for DirImpl {
 
     fn open_file(&mut self, name: &str) -> Result<Self::Read, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.open_file(&path))?;
-        Ok(FileR { file })
+        let (ro_vfs, rw_vfs) = get_vfs();
+        if rw_vfs.keys().any(|k| k.starts_with(&path)) {
+            return Ok(FileR::Path(path, 0));
+        }
+        let file = wrap(ro_vfs.open_file(&path))?;
+        Ok(FileR::File(file))
     }
 
     fn create_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.create_file(&path))?;
-        Ok(FileW { file })
+        let (_, rw_vfs) = get_vfs();
+        rw_vfs.insert(path.clone(), Vec::new());
+        Ok(FileW { path })
     }
 
     fn append_file(&mut self, name: &str) -> Result<Self::Write, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let file = wrap(vfs.append_file(&path))?;
-        Ok(FileW { file })
+        let (ro_vfs, rw_vfs) = get_vfs();
+
+        if ro_vfs.exists(&path).unwrap_or_default() {
+            let mut buf = Vec::new();
+            let mut file = wrap(ro_vfs.open_file(&path))?;
+            _ = file.read_to_end(&mut buf);
+            rw_vfs.insert(path.clone(), buf);
+            return Ok(FileW { path });
+        }
+
+        if !rw_vfs.keys().any(|k| k.starts_with(&path)) {
+            return Err(FSError::NotFound);
+        }
+        Ok(FileW { path })
     }
 
     fn get_file_size(&mut self, name: &str) -> Result<u32, FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        let meta = wrap(vfs.metadata(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+        if let Some(f) = rw_vfs.get(&path) {
+            return Ok(f.len() as u32);
+        }
+        let meta = wrap(ro_vfs.metadata(&path))?;
         Ok(meta.len as u32)
     }
 
     fn remove_file(&mut self, name: &str) -> Result<(), FSError> {
         let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        wrap(vfs.remove_file(&path))?;
+        let (ro_vfs, rw_vfs) = get_vfs();
+        if ro_vfs.exists(&path).unwrap_or_default() {
+            let err = "file is readonly and cannot be removed";
+            return Err(FSError::FormatError(err));
+        }
+        _ = rw_vfs.remove(&path);
         Ok(())
     }
 
-    fn create_dir(&mut self, name: &str) -> Result<(), FSError> {
-        let path = format!("{}/{name}", self.root);
-        let vfs = get_vfs();
-        wrap(vfs.create_dir(&path))?;
+    fn create_dir(&mut self, _name: &str) -> Result<(), FSError> {
         Ok(())
     }
 
     fn remove_dir(self) -> Result<(), FSError> {
-        let vfs = get_vfs();
-        wrap(vfs.remove_dir(&self.root))?;
         Ok(())
     }
 
@@ -301,11 +322,12 @@ impl Dir for DirImpl {
     where
         F: FnMut(EntryKind, &[u8]),
     {
-        let vfs = get_vfs();
-        let entries = wrap(vfs.read_dir(&self.root))?;
+        // TODO: read from rw_vfs as well.
+        let (ro_vfs, _rw_vfs) = get_vfs();
+        let entries = wrap(ro_vfs.read_dir(&self.root))?;
         for fname in entries {
             let path = format!("{}/{fname}", self.root);
-            let meta = wrap(vfs.metadata(&path))?;
+            let meta = wrap(ro_vfs.metadata(&path))?;
             let kind = if meta.file_type == vfs::VfsFileType::Directory {
                 EntryKind::Dir
             } else if meta.file_type == vfs::VfsFileType::File {
@@ -320,19 +342,49 @@ impl Dir for DirImpl {
     }
 }
 
-pub struct FileR {
-    file: Box<dyn vfs::SeekAndRead + Send>,
+pub enum FileR {
+    File(Box<dyn vfs::SeekAndRead + Send>),
+    Path(String, usize),
 }
 
 impl embedded_io::Read for FileR {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        std::io::Read::read(&mut self.file, buf)
+        match self {
+            FileR::File(file) => std::io::Read::read(file, buf),
+            FileR::Path(path, pos) => {
+                let (_, rw_vfs) = get_vfs();
+                let file = rw_vfs.get_mut(path).unwrap();
+                let file = &file[*pos..];
+                let to_read = file.len().min(buf.len());
+                buf[..to_read].copy_from_slice(&file[..to_read]);
+                *pos += to_read;
+                Ok(to_read)
+            }
+        }
     }
 }
 
 impl embedded_io::Seek for FileR {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
-        self.file.seek(pos.into())
+        match self {
+            FileR::File(file) => file.seek(pos.into()),
+            FileR::Path(path, pos_tar) => {
+                match pos {
+                    embedded_io::SeekFrom::Start(new_pos) => {
+                        *pos_tar = new_pos as usize;
+                    }
+                    embedded_io::SeekFrom::End(new_pos) => {
+                        let (_, rw_vfs) = get_vfs();
+                        let file = rw_vfs.get_mut(path).unwrap();
+                        *pos_tar = file.len() - new_pos as usize;
+                    }
+                    embedded_io::SeekFrom::Current(new_pos) => {
+                        *pos_tar += new_pos as usize;
+                    }
+                }
+                Ok(*pos_tar as u64)
+            }
+        }
     }
 }
 
@@ -341,16 +393,19 @@ impl embedded_io::ErrorType for FileR {
 }
 
 pub struct FileW {
-    file: Box<dyn vfs::SeekAndWrite + Send>,
+    path: String,
 }
 
 impl embedded_io::Write for FileW {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        std::io::Write::write(&mut self.file, buf)
+        let (_, rw_vfs) = get_vfs();
+        let file = rw_vfs.get_mut(&self.path).unwrap();
+        file.extend(buf);
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        std::io::Write::flush(&mut self.file)
+        Ok(())
     }
 }
 
