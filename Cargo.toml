@@ -30,8 +30,8 @@ rust-embed = { version = "8.14.0", features = [
     "interpolate-folder-path",
 ] }
 vfs = { version = "0.13.0", features = ["embedded-fs"] }
-wasm-bindgen = "0.2.130"
-web-sys = { version = "0.3.107", features = ["Window", "Performance"] }
+wasm-bindgen = "0.2.129"
+web-sys = { version = "0.3.106", features = ["Window", "Performance"] }
 critical-section = { version = "1.2.0", features = ["std"] }
 
 # embedded
@@ -40,19 +40,19 @@ critical-section = { version = "1.2.0", features = ["std"] }
 cobs = { version = "0.5.1", default-features = false }
 # Mutex for safe access to SD card from the audio core.
 critical-section = "1.2.0"
-# Work with the SD card.
-embedded-sdmmc = { version = "0.10.0", default-features = false }
+embedded-hal = { version = "1.0.0" }
 embedded-hal-bus = { version = "0.3.0", default-features = false }
 embedded-io = { version = "0.6.1", default-features = false }
+# Work with the SD card.
+embedded-sdmmc = { version = "0.10.0", default-features = false }
 # Allocator, for allocating slices in PSRAM.
 esp-alloc = { version = "0.11.0", features = ["esp32s3", "nightly"] }
 esp-bootloader-esp-idf = { version = "0.6.0", features = ["esp32s3"] }
 esp-hal = { version = "1.2.2", features = ["esp32s3", "unstable"] }
-micromath = { version = "2.1.0", default-features = false }
 # Not a direct dependency but needs to be explicitly locked.
 # Otherwise, cargo resolves it to 0.1.4.
 esp-rom-sys = "0.1.5"
 # Access flash memory, used for OTA.
 esp-storage = { version = "0.10.0", features = ["esp32s3"] }
-embedded-hal = { version = "1.0.0" }
 # Fast f32 approximation math for calibrating touchpad.
+micromath = { version = "2.1.0", default-features = false }
